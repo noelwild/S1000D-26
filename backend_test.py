@@ -261,14 +261,17 @@ class AquilaBackendTester:
     def test_database_integrity(self):
         """Test database structure and integrity"""
         try:
-            # Check if database file exists
+            # Check if database file exists in aquila directory
             db_path = "/app/aquila/aquila.db"
             if not os.path.exists(db_path):
-                # Try alternative location
-                db_path = "/tmp/aquila.db"
+                # Try backend directory
+                db_path = "/app/backend/aquila.db"
                 if not os.path.exists(db_path):
-                    self.log_test("Database Integrity", False, "Database file not found")
-                    return False
+                    # Try root directory
+                    db_path = "/app/aquila.db"
+                    if not os.path.exists(db_path):
+                        self.log_test("Database Integrity", False, "Database file not found")
+                        return False
             
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
@@ -295,7 +298,7 @@ class AquilaBackendTester:
                     return False
             
             conn.close()
-            self.log_test("Database Integrity", True, f"All required tables present: {required_tables}")
+            self.log_test("Database Integrity", True, f"All required tables present: {required_tables} (DB: {db_path})")
             return True
             
         except Exception as e:
