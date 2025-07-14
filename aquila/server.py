@@ -99,6 +99,14 @@ class DataModuleResponse(BaseModel):
     verbatim_content: str
     ste_content: str
     type: str
+    prerequisites: str
+    tools_equipment: str
+    warnings: str
+    cautions: str
+    procedural_steps: str
+    expected_results: str
+    specifications: str
+    references: str
 
 class ICNResponse(BaseModel):
     id: str
