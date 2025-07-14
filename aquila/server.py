@@ -58,7 +58,20 @@ class DataModule(SQLModel, table=True):
     sequence: int
     verbatim_content: str
     ste_content: str
-    type: str  # procedure, description, etc.
+    type: str  # procedure, description, fault_isolation, etc.
+    
+    # S1000D specific structured content
+    prerequisites: Optional[str] = Field(default="")  # Prerequisites and conditions
+    tools_equipment: Optional[str] = Field(default="")  # Required tools and equipment
+    warnings: Optional[str] = Field(default="")  # Safety warnings
+    cautions: Optional[str] = Field(default="")  # Cautions and notes
+    procedural_steps: Optional[str] = Field(default="")  # JSON string of structured steps
+    expected_results: Optional[str] = Field(default="")  # Expected outcomes
+    
+    # Technical data
+    specifications: Optional[str] = Field(default="")  # Technical specifications
+    references: Optional[str] = Field(default="")  # Reference materials
+    
     created_at: datetime = Field(default_factory=datetime.now)
 
 class ICN(SQLModel, table=True):
