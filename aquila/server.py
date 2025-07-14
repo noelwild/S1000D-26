@@ -479,6 +479,41 @@ def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> O
     # TODO: Implement more sophisticated matching based on caption content and module context
     return modules[0]
 
+def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> Optional[DataModule]:
+    """Find the most appropriate data module for an image based on its caption"""
+    modules = session.exec(select(DataModule).where(DataModule.document_id == doc_id)).all()
+    
+    if not modules:
+        return None
+    
+    # Simple scoring based on caption content matching module titles and content
+    best_module = None
+    best_score = 0
+    
+    caption_lower = caption.lower()
+    
+    for module in modules:
+        score = 0
+        
+        # Check title match
+        if any(word in caption_lower for word in module.title.lower().split()):
+            score += 3
+        
+        # Check content match
+        if any(word in module.verbatim_content.lower() for word in caption_lower.split()):
+            score += 2
+        
+        # Prefer procedure modules for images showing steps
+        if module.type == "procedure" and any(word in caption_lower for word in ["step", "procedure", "process", "install", "remove", "check"]):
+            score += 1
+        
+        if score > best_score:
+            best_score = score
+            best_module = module
+    
+    # If no good match found, return first module
+    return best_module or modules[0]
+
 async def process_document(doc_id: str, file_path: str, operational_context: str):
     """Process the uploaded PDF document with improved S1000D compliance"""
     try:
