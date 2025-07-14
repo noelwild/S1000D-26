@@ -315,13 +315,27 @@ class AquilaBackendTester:
             else:
                 self.log_test("Error Handling (404)", False, f"Expected 404, got {response.status_code}")
             
-            # Test invalid file upload
+            # Test invalid file upload - the app accepts any file but should fail processing
             files = {'file': ('test.txt', b'not a pdf', 'text/plain')}
             response = self.session.post(f"{BACKEND_URL}/documents/upload", files=files, timeout=10)
             
-            # Should handle gracefully (either reject or process with error)
-            if response.status_code in [400, 422, 500]:
-                self.log_test("Error Handling (Invalid File)", True, f"Correctly handles invalid file (status: {response.status_code})")
+            if response.status_code == 200:
+                result = response.json()
+                if "document_id" in result and result.get("status") == "processing":
+                    # Wait a bit and check if processing failed
+                    time.sleep(3)
+                    doc_response = self.session.get(f"{BACKEND_URL}/documents", timeout=10)
+                    if doc_response.status_code == 200:
+                        documents = doc_response.json()
+                        uploaded_doc = next((doc for doc in documents if doc['id'] == result['document_id']), None)
+                        if uploaded_doc and uploaded_doc['status'] == 'failed':
+                            self.log_test("Error Handling (Invalid File)", True, "Correctly fails processing of invalid file")
+                        else:
+                            self.log_test("Error Handling (Invalid File)", False, f"Expected failed status, got: {uploaded_doc['status'] if uploaded_doc else 'not found'}")
+                    else:
+                        self.log_test("Error Handling (Invalid File)", False, "Could not check document status")
+                else:
+                    self.log_test("Error Handling (Invalid File)", False, f"Unexpected upload response: {result}")
             else:
                 self.log_test("Error Handling (Invalid File)", False, f"Unexpected status: {response.status_code}")
             
