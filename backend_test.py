@@ -17,7 +17,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 
 # Configuration
-BACKEND_URL = "https://74c6f2f5-81b6-4761-9009-48174d715670.preview.emergentagent.com/api"
+BACKEND_URL = "https://3bc5d385-7e6d-4767-8491-03dab3b59a0f.preview.emergentagent.com/api"
 WEBSOCKET_URL = "wss://74c6f2f5-81b6-4761-9009-48174d715670.preview.emergentagent.com/ws"
 
 class AquilaBackendTester:
