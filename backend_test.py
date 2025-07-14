@@ -239,7 +239,8 @@ class AquilaBackendTester:
     async def test_websocket_connection(self):
         """Test WebSocket connection and message handling"""
         try:
-            async with websockets.connect(WEBSOCKET_URL, timeout=10) as websocket:
+            # Remove timeout parameter that's causing issues
+            async with websockets.connect(WEBSOCKET_URL) as websocket:
                 # Send a test message
                 await websocket.send("test_connection")
                 
