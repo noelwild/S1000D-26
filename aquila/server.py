@@ -144,7 +144,7 @@ manager = ConnectionManager()
 
 # OpenAI helper functions
 async def classify_extract(text: str) -> Dict[str, Any]:
-    """Classify text chunk and extract STE version"""
+    """Classify text chunk according to S1000D standards and extract structured STE content"""
     try:
         client = openai.OpenAI(api_key=openai.api_key)
         response = client.chat.completions.create(
@@ -154,37 +154,98 @@ async def classify_extract(text: str) -> Dict[str, Any]:
                 {
                     "role": "system",
                     "content": """You are an expert in S1000D technical documentation and ASD-STE100 Simplified Technical English.
-                    
-                    Analyze the given text chunk and return a JSON response with:
-                    - type: The data module type (procedure, description, fault_isolation, etc.)
-                    - title: A clear title for this section
-                    - info_code: S1000D info code (e.g., 040, 520, 730)
-                    - item_location: Item location code (e.g., A, B, C, D)
-                    - ste: The text rewritten in ASD-STE100 Simplified Technical English
-                    - should_start_new_module: boolean indicating if this should start a new data module
-                    
-                    Keep titles concise and descriptive. Use appropriate S1000D info codes for the content type."""
+
+Analyze the given text and return a JSON response with the following structure:
+
+{
+  "type": "procedure|description|fault_isolation|theory_of_operation|maintenance_planning|support_equipment",
+  "title": "Clear, descriptive title following S1000D naming conventions",
+  "info_code": "S1000D info code (040=description, 520=procedure, 730=fault_isolation, 710=theory, 320=maintenance_planning, 920=support_equipment)",
+  "item_location": "S1000D item location code (A, B, C, etc.)",
+  "ste": "Text rewritten in ASD-STE100 Simplified Technical English with controlled vocabulary",
+  "should_start_new_module": true/false,
+  "prerequisites": "Prerequisites and initial conditions required",
+  "tools_equipment": "Required tools, equipment, and consumables",
+  "warnings": "Safety warnings and critical information",
+  "cautions": "Important cautions and notes",
+  "procedural_steps": "Structured array of procedural steps in order",
+  "expected_results": "Expected outcomes and verification steps",
+  "specifications": "Technical specifications and tolerances",
+  "references": "Reference materials and related documents"
+}
+
+IMPORTANT S1000D RULES:
+1. Use proper S1000D info codes: 040 (description), 520 (procedure), 730 (fault isolation)
+2. Procedures should have clear step-by-step instructions
+3. Include all safety information (warnings, cautions)
+4. STE should use controlled vocabulary, simple sentences, active voice
+5. Group related content logically - don't split coherent procedures
+6. Identify prerequisites, tools, and expected results for procedures
+7. Use proper technical terminology but simplified grammar for STE
+
+STE RULES:
+- Use active voice: "Remove the plug" not "The plug should be removed"
+- Use simple sentences with one main action
+- Use approved vocabulary only
+- Use present tense for procedures
+- Use specific nouns, not pronouns
+- Maximum 25 words per sentence
+- Use parallel structure for similar actions"""
                 },
                 {
                     "role": "user",
-                    "content": f"Process this text chunk:\n\n{text}"
+                    "content": f"Process this text according to S1000D standards and convert to STE:\n\n{text}"
                 }
             ]
         )
         
         result = json.loads(response.choices[0].message.content)
+        
+        # Validate required fields and set defaults
+        required_fields = ["type", "title", "info_code", "item_location", "ste", "should_start_new_module"]
+        for field in required_fields:
+            if field not in result:
+                result[field] = get_default_value(field)
+        
+        # Ensure procedural_steps is a JSON string
+        if isinstance(result.get("procedural_steps"), list):
+            result["procedural_steps"] = json.dumps(result["procedural_steps"])
+        elif not result.get("procedural_steps"):
+            result["procedural_steps"] = json.dumps([])
+            
         return result
+        
     except Exception as e:
         print(f"OpenAI classify_extract error: {e}")
-        # Fallback response
+        # Enhanced fallback response
         return {
             "type": "description",
-            "title": "Unknown Section",
+            "title": "Content Section",
             "info_code": "040",
             "item_location": "A",
             "ste": text,
-            "should_start_new_module": True
+            "should_start_new_module": True,
+            "prerequisites": "",
+            "tools_equipment": "",
+            "warnings": "",
+            "cautions": "",
+            "procedural_steps": json.dumps([]),
+            "expected_results": "",
+            "specifications": "",
+            "references": ""
         }
+
+def get_default_value(field: str) -> Any:
+    """Get default value for missing fields"""
+    defaults = {
+        "type": "description",
+        "title": "Content Section",
+        "info_code": "040",
+        "item_location": "A",
+        "ste": "",
+        "should_start_new_module": True
+    }
+    return defaults.get(field, "")
 
 async def caption_objects(image_path: str) -> Dict[str, Any]:
     """Generate caption and detect objects in image"""
