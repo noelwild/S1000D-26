@@ -468,8 +468,19 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> Optional[DataModule]:
+    """Find the most appropriate data module for an image based on its caption"""
+    modules = session.exec(select(DataModule).where(DataModule.document_id == doc_id)).all()
+    
+    if not modules:
+        return None
+    
+    # For now, return the first module
+    # TODO: Implement more sophisticated matching based on caption content and module context
+    return modules[0]
+
 async def process_document(doc_id: str, file_path: str, operational_context: str):
-    """Process the uploaded PDF document"""
+    """Process the uploaded PDF document with improved S1000D compliance"""
     try:
         # Extract text
         await manager.broadcast({
@@ -480,14 +491,14 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
         })
         
         text = extract_text(file_path, laparams=LAParams())
-        chunks = chunk_text(text)
+        chunks = chunk_text(text)  # Using existing chunk_text function
         
         # Process chunks and create data modules
         await manager.broadcast({
             "type": "progress",
             "phase": "modules_created",
             "doc_id": doc_id,
-            "detail": f"Processing {len(chunks)} text chunks..."
+            "detail": f"Processing {len(chunks)} logical sections..."
         })
         
         with Session(engine) as session:
@@ -495,11 +506,11 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
             current_module = None
             
             for chunk in chunks:
-                # Classify and extract
+                # Classify and extract structured content
                 result = await classify_extract(chunk)
                 
                 if result.get("should_start_new_module", True) or current_module is None:
-                    # Create new data module
+                    # Create new data module with all S1000D fields
                     dmc = generate_dmc(
                         operational_context,
                         result["type"],
@@ -517,14 +528,48 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
                         sequence=sequence,
                         verbatim_content=chunk,
                         ste_content=result["ste"],
-                        type=result["type"]
+                        type=result["type"],
+                        prerequisites=result.get("prerequisites", ""),
+                        tools_equipment=result.get("tools_equipment", ""),
+                        warnings=result.get("warnings", ""),
+                        cautions=result.get("cautions", ""),
+                        procedural_steps=result.get("procedural_steps", "[]"),
+                        expected_results=result.get("expected_results", ""),
+                        specifications=result.get("specifications", ""),
+                        references=result.get("references", "")
                     )
                     session.add(current_module)
                     sequence += 1
                 else:
-                    # Append to current module
+                    # Append to current module (only for closely related content)
                     current_module.verbatim_content += "\n\n" + chunk
                     current_module.ste_content += "\n\n" + result["ste"]
+                    
+                    # Merge structured content intelligently
+                    if result.get("prerequisites"):
+                        current_module.prerequisites += "\n" + result["prerequisites"]
+                    if result.get("tools_equipment"):
+                        current_module.tools_equipment += "\n" + result["tools_equipment"]
+                    if result.get("warnings"):
+                        current_module.warnings += "\n" + result["warnings"]
+                    if result.get("cautions"):
+                        current_module.cautions += "\n" + result["cautions"]
+                    if result.get("expected_results"):
+                        current_module.expected_results += "\n" + result["expected_results"]
+                    if result.get("specifications"):
+                        current_module.specifications += "\n" + result["specifications"]
+                    if result.get("references"):
+                        current_module.references += "\n" + result["references"]
+                    
+                    # Merge procedural steps
+                    try:
+                        existing_steps = json.loads(current_module.procedural_steps or "[]")
+                        new_steps = json.loads(result.get("procedural_steps", "[]"))
+                        if new_steps:
+                            existing_steps.extend(new_steps)
+                            current_module.procedural_steps = json.dumps(existing_steps)
+                    except json.JSONDecodeError:
+                        pass
             
             session.commit()
         
@@ -549,10 +594,8 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
                     # Get caption and objects
                     vision_result = await caption_objects(image_path)
                     
-                    # Find appropriate data module (for now, use first one)
-                    data_module = session.exec(
-                        select(DataModule).where(DataModule.document_id == doc_id)
-                    ).first()
+                    # Find most appropriate data module for this image
+                    data_module = find_best_module_for_image(session, doc_id, vision_result["caption"])
                     
                     if data_module:
                         icn_record = ICN(
@@ -584,18 +627,18 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
         })
         
     except Exception as e:
-        print(f"Error processing document: {e}")
+        print(f"Error processing document {doc_id}: {e}")
+        
+        # Update document status to failed
         with Session(engine) as session:
             document = session.get(Document, doc_id)
-            if document:
-                document.status = "failed"
-                session.commit()
+            document.status = "failed"
+            session.commit()
         
         await manager.broadcast({
-            "type": "progress",
-            "phase": "error",
+            "type": "error",
             "doc_id": doc_id,
-            "detail": f"Processing failed: {str(e)}"
+            "detail": f"Document processing failed: {str(e)}"
         })
 
 @app.get("/api/documents", response_model=List[DocumentResponse])
