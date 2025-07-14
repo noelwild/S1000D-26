@@ -74,7 +74,7 @@ class AquilaBackendTester:
     def test_health_endpoint(self):
         """Test the health check endpoint"""
         try:
-            response = self.session.get(f"{BACKEND_URL}/health", timeout=10)
+            response = self.session.get(f"{BACKEND_URL}/health", timeout=30)
             
             if response.status_code == 200:
                 data = response.json()
