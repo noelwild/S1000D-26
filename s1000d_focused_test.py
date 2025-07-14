@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 # Configuration
-BACKEND_URL = "https://3bc5d385-7e6d-4767-8491-03dab3b59a0f.preview.emergentagent.com/api"
+BACKEND_URL = "http://127.0.0.1:8001/api"
 SAMPLE_PDF_PATH = "/app/aquila/tmpn48mr8t9.pdf"
 
 class S1000DFocusedTester:
