@@ -146,9 +146,14 @@ class AquilaApp {
     formatPhase(phase) {
         const phases = {
             'upload_complete': 'Upload Complete',
-            'text_extracted': 'Extracting Text',
-            'modules_created': 'Creating Modules',
+            'text_extraction': 'Extracting Text',
+            'text_extracted': 'Text Extracted',
+            'classification': 'AI Classification',
+            'ste_conversion': 'STE Conversion',
+            'module_creation': 'Creating Module',
+            'modules_created': 'Modules Created',
             'images_processing': 'Processing Images',
+            'image_analysis': 'Image Analysis',
             'finished': 'Complete'
         };
         return phases[phase] || 'Processing';
