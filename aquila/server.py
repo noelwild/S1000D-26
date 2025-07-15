@@ -1547,6 +1547,10 @@ app.mount("/static", StaticFiles(directory="."), name="static")
 # API Routes
 @app.get("/")
 async def read_root():
+    return FileResponse("index.html")
+
+@app.get("/api")
+async def api_root():
     return {"message": "Aquila S1000D-AI API"}
 
 @app.get("/index.html")
