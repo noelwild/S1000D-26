@@ -2,13 +2,14 @@ import os
 import json
 import hashlib
 import asyncio
+import re
+import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from PIL.Image import Image
 import tempfile
 import uuid
 from datetime import datetime
-import re
 import shutil
 import tiktoken
 
@@ -288,18 +289,21 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# OpenAI helper functions
+# Enhanced OpenAI helper functions with detailed logging
 async def classify_extract(text: str) -> Dict[str, Any]:
     """Classify text chunk according to S1000D standards and extract structured STE content"""
+    print(f"\n{'='*60}")
+    print(f"CLASSIFY_EXTRACT - Starting AI call")
+    print(f"Input text length: {len(text)} characters")
+    print(f"Input text preview: {text[:200]}...")
+    print(f"{'='*60}")
+    
+    start_time = time.time()
+    
     try:
         client = openai.OpenAI(api_key=openai.api_key)
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            temperature=0,
-            messages=[
-                {
-                    "role": "system",
-                    "content": """You are an expert in S1000D technical documentation and ASD-STE100 Simplified Technical English.
+        
+        system_prompt = """You are an expert in S1000D technical documentation and ASD-STE100 Simplified Technical English.
 
 Analyze the given text and return a JSON response with the following structure:
 
@@ -337,21 +341,37 @@ STE RULES:
 - Use specific nouns, not pronouns
 - Maximum 25 words per sentence
 - Use parallel structure for similar actions"""
-                },
-                {
-                    "role": "user",
-                    "content": f"Process this text according to S1000D standards and convert to STE:\n\n{text}"
-                }
+
+        user_prompt = f"Process this text according to S1000D standards and convert to STE:\n\n{text}"
+        
+        print(f"AI REQUEST:")
+        print(f"Model: gpt-4o-mini")
+        print(f"Temperature: 0")
+        print(f"System prompt length: {len(system_prompt)} characters")
+        print(f"User prompt length: {len(user_prompt)} characters")
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
             ]
         )
         
         # Debug: Print the raw response
         raw_response = response.choices[0].message.content
-        print(f"DEBUG: Raw OpenAI response: {raw_response}")
+        elapsed_time = time.time() - start_time
+        
+        print(f"\nAI RESPONSE:")
+        print(f"Processing time: {elapsed_time:.2f} seconds")
+        print(f"Raw response length: {len(raw_response)} characters")
+        print(f"Raw response: {raw_response}")
+        print(f"{'='*60}")
         
         # Check if response is empty or None
         if not raw_response or raw_response.strip() == "":
-            print("DEBUG: Empty response from OpenAI")
+            print("ERROR: Empty response from OpenAI")
             raise ValueError("Empty response from OpenAI")
         
         # Clean up the response - remove markdown code blocks if present
@@ -364,7 +384,7 @@ STE RULES:
             cleaned_response = cleaned_response[:-3]  # Remove ending ```
         cleaned_response = cleaned_response.strip()
         
-        print(f"DEBUG: Cleaned response: {cleaned_response}")
+        print(f"Cleaned response: {cleaned_response}")
         
         # Try to parse JSON
         result = json.loads(cleaned_response)
@@ -390,12 +410,13 @@ STE RULES:
         elif not isinstance(result.get("procedural_steps"), str):
             result["procedural_steps"] = json.dumps([])
             
+        print(f"SUCCESS: Parsed and validated result")
         return result
         
     except json.JSONDecodeError as e:
-        print(f"DEBUG: JSON decode error: {e}")
-        print(f"DEBUG: Raw response that failed to parse: {raw_response if 'raw_response' in locals() else 'No response captured'}")
-        print(f"DEBUG: Cleaned response that failed to parse: {cleaned_response if 'cleaned_response' in locals() else 'No cleaned response'}")
+        print(f"ERROR: JSON decode error: {e}")
+        print(f"Raw response that failed to parse: {raw_response if 'raw_response' in locals() else 'No response captured'}")
+        print(f"Cleaned response that failed to parse: {cleaned_response if 'cleaned_response' in locals() else 'No cleaned response'}")
         # Enhanced fallback response
         return {
             "type": "description",
@@ -414,7 +435,7 @@ STE RULES:
             "references": ""
         }
     except Exception as e:
-        print(f"OpenAI classify_extract error: {e}")
+        print(f"ERROR: OpenAI classify_extract error: {e}")
         # Enhanced fallback response
         return {
             "type": "description",
@@ -450,6 +471,13 @@ async def caption_objects(image_path: str) -> Dict[str, Any]:
     from PIL import Image, ImageFile
     import io
     import base64
+    
+    print(f"\n{'='*60}")
+    print(f"CAPTION_OBJECTS - Starting AI vision call")
+    print(f"Image path: {image_path}")
+    print(f"{'='*60}")
+    
+    start_time = time.time()
     
     # Enable loading of truncated images
     ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -535,6 +563,11 @@ async def caption_objects(image_path: str) -> Dict[str, Any]:
         with open(processed_image_path, "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
         
+        print(f"AI VISION REQUEST:")
+        print(f"Model: gpt-4o-mini")
+        print(f"Temperature: 0")
+        print(f"Base64 image size: {len(base64_image)} characters")
+        
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             temperature=0,
@@ -567,7 +600,12 @@ async def caption_objects(image_path: str) -> Dict[str, Any]:
         
         # Parse the response
         raw_response = response.choices[0].message.content
-        print(f"OpenAI raw response: {raw_response}")
+        elapsed_time = time.time() - start_time
+        
+        print(f"\nAI VISION RESPONSE:")
+        print(f"Processing time: {elapsed_time:.2f} seconds")
+        print(f"Raw response: {raw_response}")
+        print(f"{'='*60}")
         
         # Clean up the response - remove markdown code blocks if present
         cleaned_response = raw_response.strip()
@@ -588,10 +626,11 @@ async def caption_objects(image_path: str) -> Dict[str, Any]:
             except Exception:
                 pass
         
+        print(f"SUCCESS: Vision analysis complete")
         return result
         
     except Exception as e:
-        print(f"OpenAI caption_objects error: {e}")
+        print(f"ERROR: OpenAI caption_objects error: {e}")
         
         # Clean up temporary files
         if 'processed_image_path' in locals() and processed_image_path != image_path:
@@ -731,6 +770,62 @@ class ChunkingStrategy:
         """
         return self._create_chunks(text, target_tokens=400, overlap_tokens=50)
     
+    def extract_keyword_chunks(self, text: str, keywords: List[str], chunk_size: int = 1000) -> List[Dict[str, Any]]:
+        """
+        Extract chunks around keyword matches with specified size
+        """
+        chunks = []
+        text_lower = text.lower()
+        
+        for keyword in keywords:
+            keyword_lower = keyword.lower()
+            
+            # Find all occurrences of the keyword
+            start = 0
+            while True:
+                pos = text_lower.find(keyword_lower, start)
+                if pos == -1:
+                    break
+                
+                # Calculate chunk boundaries
+                chunk_start = max(0, pos - chunk_size // 2)
+                chunk_end = min(len(text), pos + len(keyword) + chunk_size // 2)
+                
+                # Extract the chunk
+                chunk_text = text[chunk_start:chunk_end]
+                
+                # Count tokens to ensure we're within limits
+                token_count = self.count_tokens(chunk_text)
+                if token_count > chunk_size:
+                    # Trim to fit token limit
+                    encoded = self.encoding.encode(chunk_text)
+                    trimmed = self.encoding.decode(encoded[:chunk_size])
+                    chunk_text = trimmed
+                
+                chunks.append({
+                    "keyword": keyword,
+                    "position": pos,
+                    "content": chunk_text,
+                    "token_count": self.count_tokens(chunk_text)
+                })
+                
+                # Move to next potential match
+                start = pos + len(keyword)
+        
+        # Remove duplicates based on position overlap
+        unique_chunks = []
+        for chunk in chunks:
+            is_duplicate = False
+            for existing in unique_chunks:
+                # Check if chunks overlap significantly
+                if abs(chunk["position"] - existing["position"]) < chunk_size // 4:
+                    is_duplicate = True
+                    break
+            if not is_duplicate:
+                unique_chunks.append(chunk)
+        
+        return unique_chunks
+    
     def _create_chunks(self, text: str, target_tokens: int, overlap_tokens: int) -> List[str]:
         """Create chunks with specified token limits and overlap"""
         chunks = []
@@ -806,8 +901,8 @@ class ChunkingStrategy:
         
         return overlap_text
 
-class DocumentPlanner:
-    """AI-powered planning system for data module structure"""
+class EnhancedDocumentPlanner:
+    """Enhanced AI-powered planning system with keyword extraction for optimized population"""
     
     def __init__(self):
         self.client = openai.OpenAI(api_key=openai.api_key)
@@ -815,10 +910,20 @@ class DocumentPlanner:
         
     async def analyze_and_plan(self, clean_text: str, operational_context: str) -> Dict[str, Any]:
         """
-        Analyze document using large chunks (2000 tokens/200 overlap) and create planning JSON
+        Analyze document using large chunks and create planning JSON with keyword extraction
         """
+        print(f"\n{'='*60}")
+        print(f"ENHANCED DOCUMENT PLANNER - Starting analysis")
+        print(f"Document length: {len(clean_text)} characters")
+        print(f"Operational context: {operational_context}")
+        print(f"{'='*60}")
+        
+        start_time = time.time()
+        
         # Create planning chunks
         planning_chunks = self.chunker.create_planning_chunks(clean_text)
+        
+        print(f"Created {len(planning_chunks)} planning chunks")
         
         # Initialize planning data
         planning_data = {
@@ -831,6 +936,7 @@ class DocumentPlanner:
         
         # Process each chunk to build comprehensive plan
         for i, chunk in enumerate(planning_chunks):
+            print(f"\nProcessing planning chunk {i+1}/{len(planning_chunks)}")
             chunk_plan = await self._analyze_chunk_for_planning(chunk, planning_data, i + 1, len(planning_chunks))
             
             # Merge chunk plan with overall plan
@@ -843,11 +949,16 @@ class DocumentPlanner:
                 # Subsequent chunks - refine and expand plan
                 planning_data = await self._merge_chunk_plan(planning_data, chunk_plan)
         
+        elapsed_time = time.time() - start_time
+        print(f"\nPlanning complete in {elapsed_time:.2f} seconds")
+        print(f"Total modules planned: {len(planning_data['planned_modules'])}")
+        print(f"Planning confidence: {planning_data['planning_confidence']:.2f}")
+        
         return planning_data
     
     async def _analyze_chunk_for_planning(self, chunk: str, existing_plan: Dict[str, Any], 
                                         chunk_num: int, total_chunks: int) -> Dict[str, Any]:
-        """Analyze a single chunk for planning purposes"""
+        """Analyze a single chunk for planning purposes with enhanced keyword extraction"""
         
         # Prepare context for AI
         context_prompt = ""
@@ -866,6 +977,9 @@ class DocumentPlanner:
             3. Indicate if this chunk should be MERGED with existing modules
             
             """
+        
+        print(f"\nAI PLANNING REQUEST - Chunk {chunk_num}")
+        print(f"Chunk length: {len(chunk)} characters")
         
         try:
             response = self.client.chat.completions.create(
@@ -892,13 +1006,23 @@ class DocumentPlanner:
                                     "item_location": "S1000D item location code (A, B, C, etc.)",
                                     "estimated_content_sections": ["list of expected content sections"],
                                     "priority": "high|medium|low",
-                                    "chunk_source": {chunk_num}
+                                    "chunk_source": {chunk_num},
+                                    "keywords": ["comma", "separated", "list", "of", "key", "words", "and", "phrases", "from", "document", "text", "relevant", "to", "this", "module"]
                                 }}
                             ],
                             "document_summary": "Overall summary of what this document covers",
                             "planning_confidence": 0.95,
                             "content_analysis": "Analysis of what type of content this chunk contains"
                         }}
+                        
+                        CRITICAL: For each planned module, include a "keywords" array with 10-20 specific words and phrases 
+                        extracted directly from the document text that are relevant to that module. These keywords will be 
+                        used to efficiently locate relevant content during population. Include:
+                        - Technical terms and component names
+                        - Procedure action words
+                        - Specific part numbers or identifiers
+                        - Important concept words
+                        - Measurement units and values
                         
                         IMPORTANT S1000D PLANNING RULES:
                         1. Create logical, coherent modules that make sense as standalone units
@@ -919,13 +1043,24 @@ class DocumentPlanner:
             
             # Parse response
             raw_response = response.choices[0].message.content
+            
+            print(f"AI PLANNING RESPONSE - Chunk {chunk_num}")
+            print(f"Raw response: {raw_response}")
+            
             cleaned_response = self._clean_json_response(raw_response)
             result = json.loads(cleaned_response)
             
+            # Validate keywords for each module
+            for module in result.get("planned_modules", []):
+                if "keywords" not in module or not isinstance(module["keywords"], list):
+                    module["keywords"] = []
+                    print(f"WARNING: Module '{module.get('title', 'Unknown')}' missing keywords")
+            
+            print(f"SUCCESS: Parsed planning result with {len(result.get('planned_modules', []))} modules")
             return result
             
         except Exception as e:
-            print(f"Error in planning analysis: {e}")
+            print(f"ERROR: Planning analysis failed: {e}")
             return {
                 "planned_modules": [],
                 "document_summary": f"Error analyzing chunk {chunk_num}",
@@ -934,7 +1069,7 @@ class DocumentPlanner:
             }
     
     async def _merge_chunk_plan(self, existing_plan: Dict[str, Any], chunk_plan: Dict[str, Any]) -> Dict[str, Any]:
-        """Merge planning data from multiple chunks"""
+        """Merge planning data from multiple chunks with keyword consolidation"""
         
         # Merge document summary
         if chunk_plan.get("document_summary"):
@@ -959,6 +1094,13 @@ class DocumentPlanner:
                         existing_module.get("estimated_content_sections", []) + 
                         new_module.get("estimated_content_sections", [])
                     ))
+                    
+                    # Merge keywords
+                    existing_keywords = existing_module.get("keywords", [])
+                    new_keywords = new_module.get("keywords", [])
+                    merged_keywords = list(set(existing_keywords + new_keywords))
+                    existing_module["keywords"] = merged_keywords
+                    
                     merged = True
                     break
             
@@ -1003,127 +1145,152 @@ class DocumentPlanner:
             cleaned = cleaned[:-3]
         return cleaned.strip()
 
-class ContentPopulator:
-    """AI-powered content population for planned modules"""
+class EnhancedContentPopulator:
+    """Enhanced AI-powered content population using keyword-based chunk extraction"""
     
     def __init__(self):
         self.client = openai.OpenAI(api_key=openai.api_key)
         self.chunker = ChunkingStrategy()
         
-    async def populate_module(self, planned_module: Dict[str, Any], clean_text: str, 
-                            operational_context: str) -> Dict[str, Any]:
+    async def populate_modules_concurrently(self, planned_modules: List[Dict[str, Any]], 
+                                          clean_text: str, operational_context: str,
+                                          max_concurrent: int = 3) -> List[Dict[str, Any]]:
         """
-        Populate a specific module using small chunks (400 tokens/50 overlap):
-        - Searches all population chunks for relevant content
-        - Ensures completeness of information
-        - Maintains S1000D compliance
+        Populate multiple modules concurrently with rate limiting
         """
-        # Create population chunks
-        population_chunks = self.chunker.create_population_chunks(clean_text)
+        print(f"\n{'='*60}")
+        print(f"ENHANCED CONTENT POPULATOR - Starting concurrent population")
+        print(f"Total modules to populate: {len(planned_modules)}")
+        print(f"Max concurrent requests: {max_concurrent}")
+        print(f"{'='*60}")
         
-        # Collect all relevant content for this module
-        relevant_content = []
-        content_sources = []
+        start_time = time.time()
         
-        for i, chunk in enumerate(population_chunks):
-            relevance = await self._assess_chunk_relevance(chunk, planned_module)
-            
-            if relevance["is_relevant"]:
-                relevant_content.append({
-                    "chunk_index": i,
-                    "content": chunk,
-                    "relevance_score": relevance["relevance_score"],
-                    "relevant_sections": relevance["relevant_sections"]
-                })
-                content_sources.append(f"Chunk {i+1}")
+        # Create semaphore for rate limiting
+        semaphore = asyncio.Semaphore(max_concurrent)
         
-        # Sort by relevance score
-        relevant_content.sort(key=lambda x: x["relevance_score"], reverse=True)
+        # Create tasks for all modules
+        tasks = []
+        for i, planned_module in enumerate(planned_modules):
+            task = self._populate_module_with_semaphore(
+                semaphore, planned_module, clean_text, operational_context, i + 1, len(planned_modules)
+            )
+            tasks.append(task)
+        
+        # Execute all tasks concurrently
+        populated_modules = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Handle any exceptions
+        successful_modules = []
+        for i, result in enumerate(populated_modules):
+            if isinstance(result, Exception):
+                print(f"ERROR: Module {i+1} failed: {result}")
+                # Create a fallback module
+                planned_module = planned_modules[i]
+                fallback_module = {
+                    **planned_module,
+                    "status": "error",
+                    "verbatim_content": f"Error processing module: {result}",
+                    "ste_content": f"Error processing module: {result}",
+                    "completeness_score": 0.0,
+                    "error": str(result)
+                }
+                successful_modules.append(fallback_module)
+            else:
+                successful_modules.append(result)
+        
+        elapsed_time = time.time() - start_time
+        print(f"\nConcurrent population complete in {elapsed_time:.2f} seconds")
+        print(f"Successfully populated {len(successful_modules)} modules")
+        
+        return successful_modules
+    
+    async def _populate_module_with_semaphore(self, semaphore: asyncio.Semaphore, 
+                                            planned_module: Dict[str, Any], clean_text: str,
+                                            operational_context: str, module_num: int, total_modules: int) -> Dict[str, Any]:
+        """Populate a single module with semaphore control"""
+        async with semaphore:
+            return await self.populate_module_with_keywords(
+                planned_module, clean_text, operational_context, module_num, total_modules
+            )
+    
+    async def populate_module_with_keywords(self, planned_module: Dict[str, Any], clean_text: str,
+                                          operational_context: str, module_num: int, total_modules: int) -> Dict[str, Any]:
+        """
+        Populate a specific module using keyword-based chunk extraction
+        """
+        module_title = planned_module.get("title", "Unknown")
+        keywords = planned_module.get("keywords", [])
+        
+        print(f"\n{'='*40}")
+        print(f"POPULATING MODULE {module_num}/{total_modules}: {module_title}")
+        print(f"Keywords: {keywords}")
+        print(f"{'='*40}")
+        
+        start_time = time.time()
+        
+        if not keywords:
+            print("WARNING: No keywords found for module, using fallback method")
+            # Fallback to original method if no keywords
+            return await self._populate_module_fallback(planned_module, clean_text, operational_context)
+        
+        # Extract relevant chunks using keywords
+        relevant_chunks = self.chunker.extract_keyword_chunks(clean_text, keywords, chunk_size=1000)
+        
+        print(f"Found {len(relevant_chunks)} relevant chunks using keyword search")
+        
+        if not relevant_chunks:
+            print("WARNING: No relevant chunks found using keywords, using fallback")
+            return await self._populate_module_fallback(planned_module, clean_text, operational_context)
+        
+        # Combine all relevant content
+        combined_content = "\n\n".join([chunk["content"] for chunk in relevant_chunks])
+        content_sources = [f"Keyword '{chunk['keyword']}' at position {chunk['position']}" for chunk in relevant_chunks]
+        
+        print(f"Combined content length: {len(combined_content)} characters")
+        print(f"Content sources: {content_sources}")
         
         # Populate the module with collected content
         populated_module = await self._populate_module_content(
-            planned_module, relevant_content, operational_context
+            planned_module, combined_content, operational_context, module_num, total_modules
         )
         
         populated_module["content_sources"] = content_sources
-        populated_module["total_chunks_analyzed"] = len(population_chunks)
-        populated_module["relevant_chunks_found"] = len(relevant_content)
+        populated_module["total_chunks_analyzed"] = len(relevant_chunks)
+        populated_module["relevant_chunks_found"] = len(relevant_chunks)
+        populated_module["keywords_used"] = keywords
+        
+        elapsed_time = time.time() - start_time
+        print(f"Module {module_num} populated in {elapsed_time:.2f} seconds")
         
         return populated_module
     
-    async def _assess_chunk_relevance(self, chunk: str, planned_module: Dict[str, Any]) -> Dict[str, Any]:
-        """Assess how relevant a chunk is to a planned module"""
+    async def _populate_module_fallback(self, planned_module: Dict[str, Any], clean_text: str,
+                                       operational_context: str) -> Dict[str, Any]:
+        """Fallback population method when keywords are not available"""
+        # Use first 2000 characters as fallback
+        fallback_content = clean_text[:2000]
         
-        try:
-            response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
-                temperature=0,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": """You are an expert in S1000D technical documentation. 
-                        
-                        Assess how relevant the given text chunk is to the planned data module.
-                        
-                        Return a JSON response with this structure:
-                        {
-                            "is_relevant": true/false,
-                            "relevance_score": 0.0-1.0,
-                            "relevant_sections": ["list of specific sections that are relevant"],
-                            "reasoning": "explanation of why this chunk is or isn't relevant"
-                        }
-                        
-                        Be thorough but selective - only mark as relevant if the chunk contains 
-                        information that would actually belong in this specific module."""
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""
-                        PLANNED MODULE:
-                        Title: {planned_module.get('title', '')}
-                        Description: {planned_module.get('description', '')}
-                        Type: {planned_module.get('type', '')}
-                        Expected sections: {planned_module.get('estimated_content_sections', [])}
-                        
-                        TEXT CHUNK TO ASSESS:
-                        {chunk}
-                        
-                        Is this chunk relevant to the planned module?
-                        """
-                    }
-                ]
-            )
-            
-            raw_response = response.choices[0].message.content
-            cleaned_response = self._clean_json_response(raw_response)
-            result = json.loads(cleaned_response)
-            
-            # Ensure procedural_steps is always a JSON string
-            if isinstance(result.get("procedural_steps"), list):
-                result["procedural_steps"] = json.dumps(result["procedural_steps"])
-            elif not isinstance(result.get("procedural_steps"), str):
-                result["procedural_steps"] = json.dumps([])
-            
-            return result
-            
-        except Exception as e:
-            print(f"Error assessing chunk relevance: {e}")
-            return {
-                "is_relevant": False,
-                "relevance_score": 0.0,
-                "relevant_sections": [],
-                "reasoning": f"Error: {str(e)}"
-            }
+        populated_module = await self._populate_module_content(
+            planned_module, fallback_content, operational_context, 0, 1
+        )
+        
+        populated_module["content_sources"] = ["Fallback method - first 2000 characters"]
+        populated_module["total_chunks_analyzed"] = 1
+        populated_module["relevant_chunks_found"] = 1
+        populated_module["keywords_used"] = []
+        
+        return populated_module
     
     async def _populate_module_content(self, planned_module: Dict[str, Any], 
-                                     relevant_content: List[Dict[str, Any]], 
-                                     operational_context: str) -> Dict[str, Any]:
+                                     combined_content: str, operational_context: str,
+                                     module_num: int, total_modules: int) -> Dict[str, Any]:
         """Populate module content using relevant chunks"""
         
-        # Combine all relevant content
-        combined_content = "\n\n".join([item["content"] for item in relevant_content])
+        module_title = planned_module.get("title", "Unknown")
         
         if not combined_content:
+            print("WARNING: No content found for module")
             # No relevant content found
             return {
                 **planned_module,
@@ -1141,84 +1308,88 @@ class ContentPopulator:
                 "completeness_score": 0.0
             }
         
+        print(f"\nAI POPULATION REQUEST - Module {module_num}: {module_title}")
+        print(f"Content length: {len(combined_content)} characters")
+        
         try:
+            system_prompt = f"""You are an expert in S1000D technical documentation and ASD-STE100 Simplified Technical English.
+
+            You are populating a specific data module with content from relevant text chunks.
+            
+            Create a comprehensive data module with the following structure:
+            {{
+                "verbatim_content": "Original text content formatted for this module",
+                "ste_content": "Text rewritten in ASD-STE100 Simplified Technical English",
+                "prerequisites": "Prerequisites and initial conditions required",
+                "tools_equipment": "Required tools, equipment, and consumables",
+                "warnings": "Safety warnings and critical information",
+                "cautions": "Important cautions and notes",
+                "procedural_steps": [
+                    {{
+                        "step_number": 1,
+                        "action": "Clear, actionable step description",
+                        "details": "Additional details or sub-steps"
+                    }}
+                ],
+                "expected_results": "Expected outcomes and verification steps",
+                "specifications": "Technical specifications and tolerances",
+                "references": "Reference materials and related documents",
+                "completeness_score": 0.0-1.0,
+                "status": "complete|partial|insufficient_data"
+            }}
+            
+            IMPORTANT S1000D RULES:
+            1. Use proper S1000D structure and terminology
+            2. Procedures should have clear step-by-step instructions
+            3. Include all safety information (warnings, cautions)
+            4. STE should use controlled vocabulary, simple sentences, active voice
+            5. Use operational context: {operational_context}
+            6. Be thorough but only include information that belongs in this specific module
+            
+            STE RULES:
+            - Use active voice: "Remove the plug" not "The plug should be removed"
+            - Use simple sentences with one main action
+            - Use approved vocabulary only
+            - Use present tense for procedures
+            - Use specific nouns, not pronouns
+            - Maximum 25 words per sentence
+            - Use parallel structure for similar actions
+            """
+            
+            user_prompt = f"""
+            PLANNED MODULE TO POPULATE:
+            Title: {planned_module.get('title', '')}
+            Description: {planned_module.get('description', '')}
+            Type: {planned_module.get('type', '')}
+            Expected sections: {planned_module.get('estimated_content_sections', [])}
+            
+            RELEVANT CONTENT TO USE:
+            {combined_content}
+            
+            Please populate this module with the relevant content, ensuring completeness and S1000D compliance.
+            """
+            
             response = self.client.chat.completions.create(
                 model="gpt-4o-mini",
                 temperature=0,
                 messages=[
-                    {
-                        "role": "system",
-                        "content": f"""You are an expert in S1000D technical documentation and ASD-STE100 Simplified Technical English.
-
-                        You are populating a specific data module with content from relevant text chunks.
-                        
-                        Create a comprehensive data module with the following structure:
-                        {{
-                            "verbatim_content": "Original text content formatted for this module",
-                            "ste_content": "Text rewritten in ASD-STE100 Simplified Technical English",
-                            "prerequisites": "Prerequisites and initial conditions required",
-                            "tools_equipment": "Required tools, equipment, and consumables",
-                            "warnings": "Safety warnings and critical information",
-                            "cautions": "Important cautions and notes",
-                            "procedural_steps": [
-                                {{
-                                    "step_number": 1,
-                                    "action": "Clear, actionable step description",
-                                    "details": "Additional details or sub-steps"
-                                }}
-                            ],
-                            "expected_results": "Expected outcomes and verification steps",
-                            "specifications": "Technical specifications and tolerances",
-                            "references": "Reference materials and related documents",
-                            "completeness_score": 0.0-1.0,
-                            "status": "complete|partial|insufficient_data"
-                        }}
-                        
-                        IMPORTANT S1000D RULES:
-                        1. Use proper S1000D structure and terminology
-                        2. Procedures should have clear step-by-step instructions
-                        3. Include all safety information (warnings, cautions)
-                        4. STE should use controlled vocabulary, simple sentences, active voice
-                        5. Use operational context: {operational_context}
-                        6. Be thorough but only include information that belongs in this specific module
-                        
-                        STE RULES:
-                        - Use active voice: "Remove the plug" not "The plug should be removed"
-                        - Use simple sentences with one main action
-                        - Use approved vocabulary only
-                        - Use present tense for procedures
-                        - Use specific nouns, not pronouns
-                        - Maximum 25 words per sentence
-                        - Use parallel structure for similar actions
-                        """
-                    },
-                    {
-                        "role": "user",
-                        "content": f"""
-                        PLANNED MODULE TO POPULATE:
-                        Title: {planned_module.get('title', '')}
-                        Description: {planned_module.get('description', '')}
-                        Type: {planned_module.get('type', '')}
-                        Expected sections: {planned_module.get('estimated_content_sections', [])}
-                        
-                        RELEVANT CONTENT TO USE:
-                        {combined_content}
-                        
-                        Please populate this module with the relevant content, ensuring completeness and S1000D compliance.
-                        """
-                    }
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
                 ]
             )
             
             raw_response = response.choices[0].message.content
+            print(f"\nAI POPULATION RESPONSE - Module {module_num}: {module_title}")
+            print(f"Raw response: {raw_response}")
+            
             cleaned_response = self._clean_json_response(raw_response)
             result = json.loads(cleaned_response)
             
             # Generate DMC - fix the sequence parsing
             try:
-                sequence = int(planned_module.get("module_id", "1").split("_")[-1]) if "_" in str(planned_module.get("module_id", "1")) else 1
+                sequence = int(planned_module.get("module_id", "1").split("_")[-1]) if "_" in str(planned_module.get("module_id", "1")) else module_num
             except (ValueError, AttributeError):
-                sequence = 1
+                sequence = module_num
             
             dmc = generate_dmc(
                 operational_context,
@@ -1235,10 +1406,11 @@ class ContentPopulator:
                 **result
             }
             
+            print(f"SUCCESS: Module {module_num} populated successfully")
             return populated_module
             
         except Exception as e:
-            print(f"Error populating module content: {e}")
+            print(f"ERROR: Module {module_num} population failed: {e}")
             return {
                 **planned_module,
                 "status": "error",
@@ -1282,6 +1454,11 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
     import io
     import struct
     
+    print(f"\n{'='*60}")
+    print(f"EXTRACT_IMAGES_FROM_PDF - Starting image extraction")
+    print(f"PDF path: {pdf_path}")
+    print(f"{'='*60}")
+    
     # Enable loading of truncated images
     ImageFile.LOAD_TRUNCATED_IMAGES = True
     
@@ -1289,8 +1466,11 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
     try:
         with open(pdf_path, 'rb') as file:
             reader = pypdf.PdfReader(file)
+            print(f"PDF has {len(reader.pages)} pages")
             
             for page_num, page in enumerate(reader.pages):
+                print(f"Processing page {page_num + 1}")
+                
                 if '/XObject' in page['/Resources']:
                     xObjects = page['/Resources']['/XObject'].get_object()
                     
@@ -1300,184 +1480,60 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
                                 size = (xObjects[obj]['/Width'], xObjects[obj]['/Height'])
                                 data = xObjects[obj].get_data()
                                 
-                                if data and len(data) > 0:
-                                    # Generate unique filename
-                                    image_hash = hashlib.sha256(data).hexdigest()[:8]
-                                    filename = f"image_{page_num}_{image_hash}.jpg"
+                                if xObjects[obj]['/ColorSpace'] == '/DeviceRGB':
+                                    mode = "RGB"
+                                else:
+                                    mode = "P"
+                                
+                                # Create a unique filename
+                                temp_dir = Path("/tmp/aquila_images")
+                                temp_dir.mkdir(exist_ok=True)
+                                
+                                image_hash = hashlib.sha256(data).hexdigest()[:8]
+                                image_path = temp_dir / f"image_{page_num}_{obj}_{image_hash}.jpg"
+                                
+                                try:
+                                    if '/Filter' in xObjects[obj]:
+                                        # Handle different compression formats
+                                        if xObjects[obj]['/Filter'] == '/FlateDecode':
+                                            img = Image.frombytes(mode, size, data)
+                                        elif xObjects[obj]['/Filter'] == '/DCTDecode':
+                                            img = Image.open(io.BytesIO(data))
+                                        elif xObjects[obj]['/Filter'] == '/JPXDecode':
+                                            img = Image.open(io.BytesIO(data))
+                                        else:
+                                            img = Image.frombytes(mode, size, data)
+                                    else:
+                                        img = Image.frombytes(mode, size, data)
                                     
-                                    # Use project-specific upload directory
-                                    upload_dir = Path(project_manager.get_uploads_path())
-                                    upload_dir.mkdir(exist_ok=True)
+                                    # Convert to RGB if necessary
+                                    if img.mode != 'RGB':
+                                        img = img.convert('RGB')
                                     
-                                    image_path = upload_dir / filename
+                                    # Save as JPEG
+                                    img.save(image_path, 'JPEG', quality=85)
+                                    images.append(str(image_path))
+                                    print(f"Extracted image: {image_path}")
                                     
-                                    # Multiple strategies for image processing
-                                    image_processed = False
+                                except Exception as img_error:
+                                    print(f"Error processing image on page {page_num}: {img_error}")
+                                    continue
                                     
-                                    # Strategy 1: Direct PIL processing
-                                    try:
-                                        image = Image.open(io.BytesIO(data))
-                                        image_processed = _process_and_save_image(image, image_path, image_hash)
-                                        if image_processed:
-                                            images.append(str(image_path))
-                                            continue
-                                    except Exception as pil_error:
-                                        print(f"PIL direct processing failed for image {image_hash}: {pil_error}")
-                                    
-                                    # Strategy 2: Try with different modes and error handling
-                                    try:
-                                        # Try to detect and fix common image format issues
-                                        fixed_data = _fix_image_data(data)
-                                        if fixed_data:
-                                            image = Image.open(io.BytesIO(fixed_data))
-                                            image_processed = _process_and_save_image(image, image_path, image_hash)
-                                            if image_processed:
-                                                images.append(str(image_path))
-                                                continue
-                                    except Exception as fix_error:
-                                        print(f"Fixed data processing failed for image {image_hash}: {fix_error}")
-                                    
-                                    # Strategy 3: Create a placeholder image with size info
-                                    try:
-                                        if not image_processed and size[0] > 0 and size[1] > 0:
-                                            # Create a placeholder image with the correct dimensions
-                                            placeholder = Image.new('RGB', size, color=(200, 200, 200))
-                                            placeholder.save(image_path, 'JPEG', quality=85, optimize=True)
-                                            images.append(str(image_path))
-                                            print(f"Created placeholder image for {image_hash} with size {size}")
-                                            continue
-                                    except Exception as placeholder_error:
-                                        print(f"Placeholder creation failed for image {image_hash}: {placeholder_error}")
-                                    
-                                    # Strategy 4: Raw data fallback (last resort)
-                                    try:
-                                        if not image_processed:
-                                            # Try to save raw data with different extensions
-                                            for ext in ['.jpg', '.png', '.bmp', '.tiff']:
-                                                try:
-                                                    raw_path = image_path.with_suffix(ext)
-                                                    with open(raw_path, 'wb') as img_file:
-                                                        img_file.write(data)
-                                                    
-                                                    # Test if it's a valid image
-                                                    test_image = Image.open(raw_path)
-                                                    test_image.verify()
-                                                    
-                                                    # If verification passes, convert to JPEG
-                                                    test_image = Image.open(raw_path)
-                                                    if _process_and_save_image(test_image, image_path, image_hash):
-                                                        images.append(str(image_path))
-                                                        raw_path.unlink()  # Clean up raw file
-                                                        image_processed = True
-                                                        break
-                                                except Exception:
-                                                    if raw_path.exists():
-                                                        raw_path.unlink()
-                                                    continue
-                                    except Exception as raw_error:
-                                        print(f"Raw data fallback failed for image {image_hash}: {raw_error}")
-                                    
-                                    # Clean up failed attempts
-                                    if not image_processed and image_path.exists():
-                                        image_path.unlink()
-                                        
                             except Exception as e:
-                                print(f"Error extracting image: {e}")
+                                print(f"Error extracting image from page {page_num}: {e}")
                                 continue
+                                
     except Exception as e:
-        print(f"Error in image extraction: {e}")
+        print(f"Error reading PDF: {e}")
+        return []
     
+    print(f"Total images extracted: {len(images)}")
     return images
 
-def _process_and_save_image(image, image_path: Path, image_hash: str) -> bool:
-    """Process and save an image with proper format conversion"""
-    from PIL import Image
-    
-    try:
-        # Ensure we have a valid image
-        if not image or image.size[0] == 0 or image.size[1] == 0:
-            return False
-        
-        # Convert to RGB if necessary (for JPEG compatibility)
-        if image.mode in ('RGBA', 'LA', 'P'):
-            # Handle transparency properly
-            rgb_image = Image.new('RGB', image.size, (255, 255, 255))
-            if image.mode == 'P':
-                try:
-                    image = image.convert('RGBA')
-                except Exception:
-                    image = image.convert('RGB')
-            
-            if image.mode in ('RGBA', 'LA'):
-                try:
-                    # Use alpha channel as mask if available
-                    alpha = image.split()[-1]
-                    rgb_image.paste(image, mask=alpha)
-                except Exception:
-                    # If alpha handling fails, just paste without mask
-                    rgb_image.paste(image.convert('RGB'))
-            else:
-                rgb_image.paste(image)
-            
-            image = rgb_image
-        elif image.mode not in ('RGB', 'L'):
-            # Convert other modes to RGB
-            image = image.convert('RGB')
-        
-        # Save as JPEG with good quality
-        image.save(image_path, 'JPEG', quality=85, optimize=True)
-        print(f"Successfully processed image {image_hash} (format: {image.format}, mode: {image.mode}, size: {image.size})")
-        return True
-        
-    except Exception as e:
-        print(f"Error processing image {image_hash}: {e}")
-        return False
+# Initialize FastAPI app
+app = FastAPI(title="Aquila S1000D-AI", version="1.0.0")
 
-def _fix_image_data(data: bytes) -> bytes:
-    """Attempt to fix common image data issues"""
-    try:
-        # Check for minimum data size
-        if len(data) < 10:
-            return None
-        
-        # Try to detect and fix JPEG headers
-        if data[:3] == b'\xff\xd8\xff':
-            # This looks like a JPEG, but might be truncated
-            # Ensure it ends with JPEG end marker
-            if not data.endswith(b'\xff\xd9'):
-                data = data + b'\xff\xd9'
-        
-        # Try to detect PNG headers and fix if needed
-        elif data[:8] == b'\x89PNG\r\n\x1a\n':
-            # PNG header looks good, no fixing needed
-            pass
-        
-        # Try to detect BMP headers
-        elif data[:2] == b'BM':
-            # BMP header detected, no fixing needed
-            pass
-        
-        # For other formats, try to add a minimal header if missing
-        else:
-            # Check if this might be raw image data
-            # If the data size matches expected dimensions, create a minimal header
-            pass
-        
-        return data
-        
-    except Exception:
-        return None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    print("Aquila S1000D-AI with Project Management initialized successfully")
-    yield
-    print("Shutting down Aquila S1000D-AI")
-
-# FastAPI app
-app = FastAPI(title="Aquila S1000D-AI with Project Management", lifespan=lifespan)
-
-# CORS middleware
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -1486,245 +1542,94 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Project Management API Routes
+# Mount static files
+app.mount("/static", StaticFiles(directory="."), name="static")
+
+# API Routes
+@app.get("/")
+async def read_root():
+    return {"message": "Aquila S1000D-AI API"}
+
+@app.get("/index.html")
+async def serve_index():
+    return FileResponse("index.html")
+
+@app.get("/app.js")
+async def serve_app_js():
+    return FileResponse("app.js")
+
+@app.get("/app.css")
+async def serve_app_css():
+    return FileResponse("app.css")
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+# Project Management Routes
+@app.post("/api/projects", response_model=ProjectResponse)
+async def create_project(name: str = Form(...), description: str = Form("")):
+    """Create a new project"""
+    try:
+        project = project_manager.create_project(name, description)
+        return ProjectResponse(**project)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/projects", response_model=List[ProjectResponse])
 async def get_projects():
     """Get all projects"""
-    projects = project_manager.get_projects()
-    return [ProjectResponse(
-        id=p["id"],
-        name=p["name"],
-        description=p.get("description", ""),
-        created_at=p["created_at"]
-    ) for p in projects]
-
-@app.post("/api/projects")
-async def create_project(name: str = Form(...), description: str = Form("")):
-    """Create a new project"""
-    if not name or not name.strip():
-        raise HTTPException(status_code=400, detail="Project name is required")
-    
-    project = project_manager.create_project(name.strip(), description.strip())
-    return ProjectResponse(
-        id=project["id"],
-        name=project["name"],
-        description=project.get("description", ""),
-        created_at=project["created_at"]
-    )
-
-@app.delete("/api/projects/{project_id}")
-async def delete_project(project_id: str):
-    """Delete a project"""
-    success = project_manager.delete_project(project_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return {"message": "Project deleted successfully"}
+    try:
+        projects = project_manager.get_projects()
+        return [ProjectResponse(**project) for project in projects]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/projects/{project_id}/select")
 async def select_project(project_id: str):
     """Select a project as current"""
-    success = project_manager.set_current_project(project_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return {"message": "Project selected successfully"}
+    try:
+        success = project_manager.set_current_project(project_id)
+        if success:
+            return {"status": "success", "project_id": project_id}
+        else:
+            raise HTTPException(status_code=404, detail="Project not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/projects/current")
 async def get_current_project():
     """Get current project"""
-    project = project_manager.get_current_project()
-    if not project:
-        return {"current_project": None}
-    
-    return {
-        "current_project": ProjectResponse(
-            id=project["id"],
-            name=project["name"],
-            description=project.get("description", ""),
-            created_at=project["created_at"]
-        )
-    }
+    try:
+        project = project_manager.get_current_project()
+        if project:
+            return ProjectResponse(**project)
+        else:
+            return {"status": "no_project_selected"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-# Application API Routes
-@app.get("/api/health")
-async def health_check():
-    current_project = project_manager.get_current_project()
-    return {
-        "status": "healthy", 
-        "service": "Aquila S1000D-AI",
-        "current_project": current_project["name"] if current_project else None
-    }
-
-@app.post("/api/documents/plan")
-async def plan_document_modules(doc_id: str) -> Dict[str, Any]:
-    """Generate planning JSON for document using large chunks"""
-    engine = project_manager.get_current_engine()
-    if not engine:
-        raise HTTPException(status_code=400, detail="No project selected")
-    
-    with Session(engine) as session:
-        # Get document
-        document = session.get(Document, doc_id)
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-        
-        # Check if plan already exists
-        existing_plan = session.exec(
-            select(DocumentPlan).where(DocumentPlan.document_id == doc_id)
-        ).first()
-        
-        if existing_plan:
-            return {
-                "status": "already_planned",
-                "plan_id": existing_plan.id,
-                "plan_data": json.loads(existing_plan.plan_data)
-            }
-        
-        # Extract and clean text
-        text_cleaner = TextCleaner()
-        raw_text = extract_text(document.file_path, laparams=LAParams())
-        cleaning_result = text_cleaner.clean_extracted_text(raw_text)
-        clean_text = cleaning_result["clean_text"]
-        
-        # Create planning
-        planner = DocumentPlanner()
-        planning_data = await planner.analyze_and_plan(clean_text, document.operational_context)
-        
-        # Save planning data
-        plan_record = DocumentPlan(
-            document_id=doc_id,
-            plan_data=json.dumps(planning_data),
-            planning_confidence=planning_data.get("planning_confidence", 0.0),
-            total_chunks_analyzed=planning_data.get("total_planning_chunks", 0),
-            status="planned"
-        )
-        session.add(plan_record)
-        session.commit()
-        
-        return {
-            "status": "planned",
-            "plan_id": plan_record.id,
-            "plan_data": planning_data
-        }
-
-@app.post("/api/documents/populate")
-async def populate_planned_modules(doc_id: str) -> Dict[str, Any]:
-    """Populate planned modules with content using small chunks"""
-    engine = project_manager.get_current_engine()
-    if not engine:
-        raise HTTPException(status_code=400, detail="No project selected")
-    
-    with Session(engine) as session:
-        # Get document and plan
-        document = session.get(Document, doc_id)
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-        
-        plan = session.exec(
-            select(DocumentPlan).where(DocumentPlan.document_id == doc_id)
-        ).first()
-        
-        if not plan:
-            raise HTTPException(status_code=404, detail="No plan found. Please create a plan first.")
-        
-        # Get clean text
-        text_cleaner = TextCleaner()
-        raw_text = extract_text(document.file_path, laparams=LAParams())
-        cleaning_result = text_cleaner.clean_extracted_text(raw_text)
-        clean_text = cleaning_result["clean_text"]
-        
-        # Load plan data
-        planning_data = json.loads(plan.plan_data)
-        planned_modules = planning_data.get("planned_modules", [])
-        
-        # Populate each module
-        populator = ContentPopulator()
-        populated_modules = []
-        
-        for i, planned_module in enumerate(planned_modules):
-            # Send progress update
-            await manager.broadcast({
-                "type": "progress",
-                "phase": "population",
-                "doc_id": doc_id,
-                "detail": f"Populating module {i+1} of {len(planned_modules)}: {planned_module.get('title', 'Unknown')}",
-                "processing_type": "Module Population",
-                "current_text": f"Analyzing content for: {planned_module.get('title', 'Unknown')}",
-                "progress_section": f"{i+1}/{len(planned_modules)}"
-            })
-            
-            populated_module = await populator.populate_module(
-                planned_module, clean_text, document.operational_context
-            )
-            
-            # Save to database - ensure all data is properly converted for SQLite
-            data_module = DataModule(
-                document_id=doc_id,
-                plan_id=plan.id,
-                module_id=str(populated_module.get("module_id", f"module_{i+1}")),
-                dmc=str(populated_module.get("dmc", "")),
-                title=str(populated_module.get("title", "")),
-                info_code=str(populated_module.get("info_code", "040")),
-                item_location=str(populated_module.get("item_location", "A")),
-                sequence=i + 1,
-                verbatim_content=str(populated_module.get("verbatim_content", "")),
-                ste_content=str(populated_module.get("ste_content", "")),
-                type=str(populated_module.get("type", "description")),
-                prerequisites=str(populated_module.get("prerequisites", "")),
-                tools_equipment=str(populated_module.get("tools_equipment", "")),
-                warnings=str(populated_module.get("warnings", "")),
-                cautions=str(populated_module.get("cautions", "")),
-                procedural_steps=json.dumps(populated_module.get("procedural_steps", [])) if isinstance(populated_module.get("procedural_steps"), list) else str(populated_module.get("procedural_steps", "[]")),
-                expected_results=str(populated_module.get("expected_results", "")),
-                specifications=str(populated_module.get("specifications", "")),
-                references=str(populated_module.get("references", "")),
-                content_sources=json.dumps(populated_module.get("content_sources", [])) if isinstance(populated_module.get("content_sources"), list) else str(populated_module.get("content_sources", "[]")),
-                completeness_score=float(populated_module.get("completeness_score", 0.0)),
-                relevant_chunks_found=int(populated_module.get("relevant_chunks_found", 0)),
-                total_chunks_analyzed=int(populated_module.get("total_chunks_analyzed", 0)),
-                population_status=str(populated_module.get("status", "complete"))
-            )
-            
-            session.add(data_module)
-            populated_modules.append(populated_module)
-        
-        # Update plan status
-        plan.status = "completed"
-        session.commit()
-        
-        return {
-            "status": "populated",
-            "modules_created": len(populated_modules),
-            "populated_modules": populated_modules
-        }
-
-@app.get("/api/documents/{doc_id}/plan")
-async def get_document_plan(doc_id: str) -> Dict[str, Any]:
-    """Get planning information for document"""
-    engine = project_manager.get_current_engine()
-    if not engine:
-        raise HTTPException(status_code=400, detail="No project selected")
-    
-    with Session(engine) as session:
-        plan = session.exec(
-            select(DocumentPlan).where(DocumentPlan.document_id == doc_id)
-        ).first()
-        
-        if not plan:
-            raise HTTPException(status_code=404, detail="No plan found")
-        
-        return {
-            "plan_id": plan.id,
-            "document_id": plan.document_id,
-            "plan_data": json.loads(plan.plan_data),
-            "planning_confidence": plan.planning_confidence,
-            "total_chunks_analyzed": plan.total_chunks_analyzed,
-            "status": plan.status,
-            "created_at": plan.created_at
-        }
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    """Delete a project"""
+    try:
+        success = project_manager.delete_project(project_id)
+        if success:
+            return {"status": "success", "message": "Project deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Project not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/documents/upload", response_model=Dict[str, Any])
 async def upload_document(file: UploadFile = File(...), operational_context: str = "Water"):
-    """Upload and process a PDF document with enhanced two-phase processing"""
+    """Upload and process a PDF document with enhanced processing"""
+    print(f"\n{'='*80}")
+    print(f"DOCUMENT UPLOAD - Starting upload process")
+    print(f"Filename: {file.filename}")
+    print(f"Operational context: {operational_context}")
+    print(f"{'='*80}")
+    
     # Check if project is selected
     if not project_manager.get_current_project():
         raise HTTPException(status_code=400, detail="No project selected")
@@ -1747,8 +1652,11 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
         content = await file.read()
         buffer.write(content)
     
+    print(f"File saved to: {file_path}")
+    
     # Calculate file hash for deduplication
     file_hash = calculate_sha256(str(file_path))
+    print(f"File hash: {file_hash}")
     
     # Check for duplicates
     with Session(engine) as session:
@@ -1757,6 +1665,7 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
         ).first()
         
         if existing_doc:
+            print(f"Duplicate file detected: {existing_doc.id}")
             return {
                 "status": "duplicate",
                 "message": "Document already exists",
@@ -1776,13 +1685,15 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
         session.refresh(document)
         doc_id = document.id
     
-    # Start asynchronous processing with new two-phase system
+    print(f"Document created with ID: {doc_id}")
+    
+    # Start asynchronous processing with enhanced system
     asyncio.create_task(process_document_enhanced(doc_id, str(file_path), operational_context))
     
     return {
         "status": "upload_successful",
         "document_id": doc_id,
-        "message": "Document uploaded successfully. Processing will begin shortly."
+        "message": "Document uploaded successfully. Enhanced processing will begin shortly."
     }
 
 def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> Optional[DataModule]:
@@ -1821,7 +1732,15 @@ def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> O
     return best_module or modules[0]
 
 async def process_document_enhanced(doc_id: str, file_path: str, operational_context: str):
-    """Enhanced document processing with two-phase approach"""
+    """Enhanced document processing with all 4 optimization phases"""
+    print(f"\n{'='*80}")
+    print(f"PROCESS_DOCUMENT_ENHANCED - Starting enhanced processing")
+    print(f"Document ID: {doc_id}")
+    print(f"File path: {file_path}")
+    print(f"Operational context: {operational_context}")
+    print(f"{'='*80}")
+    
+    overall_start_time = time.time()
     engine = project_manager.get_current_engine()
     
     try:
@@ -1832,10 +1751,14 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
             "doc_id": doc_id,
             "detail": "Document uploaded successfully",
             "processing_type": "Upload Complete",
-            "current_text": "Starting enhanced processing..."
+            "current_text": "Starting enhanced processing with concurrent module population..."
         })
         
         # Phase 2: Text Extraction and Cleaning
+        print(f"\n{'='*60}")
+        print(f"PHASE 2: TEXT EXTRACTION AND CLEANING")
+        print(f"{'='*60}")
+        
         await manager.broadcast({
             "type": "progress",
             "phase": "text_extraction",
@@ -1851,6 +1774,10 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
         cleaning_result = text_cleaner.clean_extracted_text(raw_text)
         clean_text = cleaning_result["clean_text"]
         
+        print(f"Raw text length: {len(raw_text)} characters")
+        print(f"Clean text length: {len(clean_text)} characters")
+        print(f"Cleaning report: {cleaning_result['cleaning_report']}")
+        
         await manager.broadcast({
             "type": "progress",
             "phase": "text_extracted",
@@ -1860,17 +1787,21 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
             "current_text": f"Removed: {len(cleaning_result['removed_elements'])} non-content elements"
         })
         
-        # Phase 3: Document Planning
+        # Phase 3: Enhanced Document Planning with Keywords
+        print(f"\n{'='*60}")
+        print(f"PHASE 3: ENHANCED DOCUMENT PLANNING")
+        print(f"{'='*60}")
+        
         await manager.broadcast({
             "type": "progress",
             "phase": "planning",
             "doc_id": doc_id,
-            "detail": "Analyzing document structure for optimal data modules...",
-            "processing_type": "Document Planning",
-            "current_text": "AI is analyzing content to plan data modules..."
+            "detail": "Analyzing document structure and extracting keywords for optimal data modules...",
+            "processing_type": "Enhanced Document Planning",
+            "current_text": "AI is analyzing content to plan data modules with keyword extraction..."
         })
         
-        planner = DocumentPlanner()
+        planner = EnhancedDocumentPlanner()
         planning_data = await planner.analyze_and_plan(clean_text, operational_context)
         
         # Save planning data
@@ -1890,41 +1821,47 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
             "type": "progress",
             "phase": "planning_complete",
             "doc_id": doc_id,
-            "detail": f"Planning complete. {len(planning_data.get('planned_modules', []))} modules planned",
+            "detail": f"Enhanced planning complete. {len(planning_data.get('planned_modules', []))} modules planned with keywords",
             "processing_type": "Planning Complete",
-            "current_text": f"Confidence: {planning_data.get('planning_confidence', 0.0):.2f}, Modules: {len(planning_data.get('planned_modules', []))}"
+            "current_text": f"Confidence: {planning_data.get('planning_confidence', 0.0):.2f}, Modules: {len(planning_data.get('planned_modules', []))} with keyword extraction"
         })
         
-        # Phase 4: Module Population
+        # Phase 4: Concurrent Module Population with Keyword-Based Extraction
+        print(f"\n{'='*60}")
+        print(f"PHASE 4: CONCURRENT MODULE POPULATION")
+        print(f"{'='*60}")
+        
         await manager.broadcast({
             "type": "progress",
             "phase": "population",
             "doc_id": doc_id,
-            "detail": "Populating planned modules with content...",
-            "processing_type": "Module Population",
-            "current_text": "AI is reading through text to populate each module..."
+            "detail": "Populating planned modules concurrently with keyword-based content extraction...",
+            "processing_type": "Concurrent Module Population",
+            "current_text": "AI is using keywords to efficiently extract and populate module content..."
         })
         
         planned_modules = planning_data.get("planned_modules", [])
-        populator = ContentPopulator()
-        populated_modules = []
+        populator = EnhancedContentPopulator()
         
+        # Populate modules concurrently
+        populated_modules = await populator.populate_modules_concurrently(
+            planned_modules, clean_text, operational_context, max_concurrent=3
+        )
+        
+        # Save populated modules to database
         with Session(engine) as session:
-            for i, planned_module in enumerate(planned_modules):
+            for i, populated_module in enumerate(populated_modules):
+                
                 # Send progress update
                 await manager.broadcast({
                     "type": "progress",
                     "phase": "population",
                     "doc_id": doc_id,
-                    "detail": f"Populating module {i+1} of {len(planned_modules)}: {planned_module.get('title', 'Unknown')}",
-                    "processing_type": "Module Population",
-                    "current_text": f"Analyzing content for: {planned_module.get('title', 'Unknown')}",
-                    "progress_section": f"{i+1}/{len(planned_modules)}"
+                    "detail": f"Saving module {i+1} of {len(populated_modules)}: {populated_module.get('title', 'Unknown')}",
+                    "processing_type": "Saving Populated Modules",
+                    "current_text": f"Saved: {populated_module.get('title', 'Unknown')}",
+                    "progress_section": f"{i+1}/{len(populated_modules)}"
                 })
-                
-                populated_module = await populator.populate_module(
-                    planned_module, clean_text, operational_context
-                )
                 
                 # Save to database - ensure all data is properly converted for SQLite
                 data_module = DataModule(
@@ -1955,7 +1892,6 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
                 )
                 
                 session.add(data_module)
-                populated_modules.append(populated_module)
             
             # Update plan status
             plan_record = session.get(DocumentPlan, plan_id)
@@ -1965,6 +1901,10 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
             session.commit()
         
         # Phase 5: Image Processing (keep existing functionality)
+        print(f"\n{'='*60}")
+        print(f"PHASE 5: IMAGE PROCESSING")
+        print(f"{'='*60}")
+        
         await manager.broadcast({
             "type": "progress",
             "phase": "images_processing",
@@ -2045,17 +1985,26 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
                 document.status = "completed"
                 session.commit()
         
+        overall_elapsed_time = time.time() - overall_start_time
+        
+        print(f"\n{'='*80}")
+        print(f"PROCESSING COMPLETE")
+        print(f"Total time: {overall_elapsed_time:.2f} seconds")
+        print(f"Modules created: {len(populated_modules)}")
+        print(f"Images processed: {len(images) if images else 0}")
+        print(f"{'='*80}")
+        
         await manager.broadcast({
             "type": "progress",
             "phase": "finished",
             "doc_id": doc_id,
-            "detail": "Enhanced document processing completed successfully",
+            "detail": f"Enhanced processing completed in {overall_elapsed_time:.2f} seconds",
             "processing_type": "Complete",
-            "current_text": f"Created {len(populated_modules)} data modules with enhanced AI planning and population"
+            "current_text": f"Created {len(populated_modules)} data modules with concurrent processing and keyword-based extraction"
         })
         
     except Exception as e:
-        print(f"Error processing document {doc_id}: {e}")
+        print(f"ERROR: Processing document {doc_id} failed: {e}")
         
         # Update document status to failed
         with Session(engine) as session:
@@ -2072,330 +2021,131 @@ async def process_document_enhanced(doc_id: str, file_path: str, operational_con
             "current_text": f"Processing failed: {str(e)}"
         })
 
-async def process_document(doc_id: str, file_path: str, operational_context: str):
-    """Process the uploaded PDF document with improved S1000D compliance"""
-    try:
-        # Get current project's database engine
-        engine = project_manager.get_current_engine()
-        
-        # Extract text
-        await manager.broadcast({
-            "type": "progress",
-            "phase": "text_extraction",
-            "doc_id": doc_id,
-            "detail": "Extracting text from PDF...",
-            "processing_type": "Text Extraction",
-            "current_text": "Reading PDF file structure..."
-        })
-        
-        text = extract_text(file_path, laparams=LAParams())
-        chunks = chunk_text(text)  # Using existing chunk_text function
-        
-        # Process chunks and create data modules
-        await manager.broadcast({
-            "type": "progress",
-            "phase": "text_extracted",
-            "doc_id": doc_id,
-            "detail": f"Processing {len(chunks)} logical sections...",
-            "processing_type": "Document Analysis",
-            "current_text": f"Divided document into {len(chunks)} logical sections for analysis"
-        })
-        
-        with Session(engine) as session:
-            sequence = 1
-            current_module = None
-            
-            for i, chunk in enumerate(chunks):
-                # Truncate text for display (first 150 characters)
-                truncated_text = chunk[:150] + "..." if len(chunk) > 150 else chunk
-                
-                # Send progress update for classification
-                await manager.broadcast({
-                    "type": "progress",
-                    "phase": "classification",
-                    "doc_id": doc_id,
-                    "detail": f"Classifying section {i+1} of {len(chunks)}",
-                    "processing_type": "AI Classification",
-                    "current_text": truncated_text,
-                    "progress_section": f"{i+1}/{len(chunks)}"
-                })
-                
-                # Classify and extract structured content
-                result = await classify_extract(chunk)
-                
-                # Send progress update for STE conversion
-                await manager.broadcast({
-                    "type": "progress",
-                    "phase": "ste_conversion",
-                    "doc_id": doc_id,
-                    "detail": f"Converting section {i+1} to Simplified Technical English",
-                    "processing_type": "STE Conversion",
-                    "current_text": result.get("ste", "")[:150] + "..." if len(result.get("ste", "")) > 150 else result.get("ste", ""),
-                    "progress_section": f"{i+1}/{len(chunks)}"
-                })
-                
-                if result.get("should_start_new_module", True) or current_module is None:
-                    # Create new data module with all S1000D fields
-                    dmc = generate_dmc(
-                        operational_context,
-                        result["type"],
-                        result["info_code"],
-                        result["item_location"],
-                        sequence
-                    )
-                    
-                    # Send progress update for module creation
-                    await manager.broadcast({
-                        "type": "progress",
-                        "phase": "module_creation",
-                        "doc_id": doc_id,
-                        "detail": f"Creating data module: {result['title']}",
-                        "processing_type": "Module Creation",
-                        "current_text": f"DMC: {dmc} | Title: {result['title']} | Type: {result['type']}",
-                        "progress_section": f"{i+1}/{len(chunks)}"
-                    })
-                    
-                    current_module = DataModule(
-                        document_id=doc_id,
-                        dmc=dmc,
-                        title=result["title"],
-                        info_code=result["info_code"],
-                        item_location=result["item_location"],
-                        sequence=sequence,
-                        verbatim_content=chunk,
-                        ste_content=result["ste"],
-                        type=result["type"],
-                        prerequisites=result.get("prerequisites", ""),
-                        tools_equipment=result.get("tools_equipment", ""),
-                        warnings=result.get("warnings", ""),
-                        cautions=result.get("cautions", ""),
-                        procedural_steps=result.get("procedural_steps", "[]"),
-                        expected_results=result.get("expected_results", ""),
-                        specifications=result.get("specifications", ""),
-                        references=result.get("references", "")
-                    )
-                    session.add(current_module)
-                    sequence += 1
-                else:
-                    # Append to current module (only for closely related content)
-                    current_module.verbatim_content += "\n\n" + chunk
-                    current_module.ste_content += "\n\n" + result["ste"]
-                    
-                    # Merge structured content intelligently
-                    if result.get("prerequisites") and isinstance(result["prerequisites"], str):
-                        current_module.prerequisites += "\n" + result["prerequisites"]
-                    if result.get("tools_equipment") and isinstance(result["tools_equipment"], str):
-                        current_module.tools_equipment += "\n" + result["tools_equipment"]
-                    if result.get("warnings") and isinstance(result["warnings"], str):
-                        current_module.warnings += "\n" + result["warnings"]
-                    if result.get("cautions") and isinstance(result["cautions"], str):
-                        current_module.cautions += "\n" + result["cautions"]
-                    if result.get("expected_results") and isinstance(result["expected_results"], str):
-                        current_module.expected_results += "\n" + result["expected_results"]
-                    if result.get("specifications") and isinstance(result["specifications"], str):
-                        current_module.specifications += "\n" + result["specifications"]
-                    if result.get("references") and isinstance(result["references"], str):
-                        current_module.references += "\n" + result["references"]
-                    
-                    # Merge procedural steps
-                    try:
-                        existing_steps = json.loads(current_module.procedural_steps or "[]")
-                        new_steps = json.loads(result.get("procedural_steps", "[]"))
-                        if new_steps:
-                            existing_steps.extend(new_steps)
-                            current_module.procedural_steps = json.dumps(existing_steps)
-                    except json.JSONDecodeError:
-                        pass
-            
-            session.commit()
-            
-            # Send completion update for modules
-            await manager.broadcast({
-                "type": "progress",
-                "phase": "modules_created",
-                "doc_id": doc_id,
-                "detail": f"Created {sequence-1} data modules",
-                "processing_type": "Module Creation Complete",
-                "current_text": f"Successfully created {sequence-1} S1000D data modules"
-            })
-        
-        # Extract and process images
-        await manager.broadcast({
-            "type": "progress",
-            "phase": "images_processing",
-            "doc_id": doc_id,
-            "detail": "Extracting images from PDF...",
-            "processing_type": "Image Extraction",
-            "current_text": "Scanning PDF for embedded images..."
-        })
-        
-        images = extract_images_from_pdf(file_path)
-        
-        if images:
-            await manager.broadcast({
-                "type": "progress",
-                "phase": "images_processing",
-                "doc_id": doc_id,
-                "detail": f"Found {len(images)} images, generating captions...",
-                "processing_type": "Image Analysis",
-                "current_text": f"Processing {len(images)} images with AI vision analysis"
-            })
-        
-        with Session(engine) as session:
-            for i, image_path in enumerate(images):
-                try:
-                    # Generate ICN
-                    with open(image_path, 'rb') as img_file:
-                        image_hash = hashlib.sha256(img_file.read()).hexdigest()[:8]
-                    icn = f"ICN-{image_hash}"
-                    
-                    # Send progress update for image processing
-                    await manager.broadcast({
-                        "type": "progress",
-                        "phase": "image_analysis",
-                        "doc_id": doc_id,
-                        "detail": f"Analyzing image {i+1} of {len(images)}",
-                        "processing_type": "AI Vision Analysis",
-                        "current_text": f"Generating caption for image {icn}...",
-                        "progress_section": f"{i+1}/{len(images)}"
-                    })
-                    
-                    # Get caption and objects
-                    vision_result = await caption_objects(image_path)
-                    
-                    # Find most appropriate data module for this image
-                    data_module = find_best_module_for_image(session, doc_id, vision_result["caption"])
-                    
-                    if data_module:
-                        icn_record = ICN(
-                            document_id=doc_id,
-                            data_module_id=data_module.id,
-                            icn=icn,
-                            image_path=image_path,
-                            caption=vision_result["caption"],
-                            objects=json.dumps(vision_result["objects"])
-                        )
-                        session.add(icn_record)
-                        
-                        # Send progress update with caption
-                        await manager.broadcast({
-                            "type": "progress",
-                            "phase": "image_analysis",
-                            "doc_id": doc_id,
-                            "detail": f"Generated caption for image {i+1}",
-                            "processing_type": "Image Caption Generated",
-                            "current_text": vision_result["caption"][:150] + "..." if len(vision_result["caption"]) > 150 else vision_result["caption"],
-                            "progress_section": f"{i+1}/{len(images)}"
-                        })
-                        
-                except Exception as e:
-                    print(f"Error processing image {image_path}: {e}")
-                    continue
-            
-            session.commit()
-        
-        # Update document status
-        with Session(engine) as session:
-            document = session.get(Document, doc_id)
-            document.status = "completed"
-            session.commit()
-        
-        await manager.broadcast({
-            "type": "progress",
-            "phase": "finished",
-            "doc_id": doc_id,
-            "detail": "Document processing completed successfully",
-            "processing_type": "Complete",
-            "current_text": "All processing stages completed. Document is ready for viewing."
-        })
-        
-    except Exception as e:
-        print(f"Error processing document {doc_id}: {e}")
-        
-        # Update document status to failed
-        engine = project_manager.get_current_engine()
-        with Session(engine) as session:
-            document = session.get(Document, doc_id)
-            document.status = "failed"
-            session.commit()
-        
-        await manager.broadcast({
-            "type": "error",
-            "doc_id": doc_id,
-            "detail": f"Document processing failed: {str(e)}",
-            "processing_type": "Error",
-            "current_text": f"Processing failed: {str(e)}"
-        })
-
 @app.get("/api/documents", response_model=List[DocumentResponse])
 async def get_documents():
-    """Get all documents for current project"""
+    """Get all documents for the current project"""
+    if not project_manager.get_current_project():
+        raise HTTPException(status_code=400, detail="No project selected")
+    
     engine = project_manager.get_current_engine()
     if not engine:
         raise HTTPException(status_code=400, detail="No project selected")
-        
-    with Session(engine) as session:
-        documents = session.exec(select(Document)).all()
-        return documents
+    
+    try:
+        with Session(engine) as session:
+            documents = session.exec(select(Document)).all()
+            return [DocumentResponse(
+                id=doc.id,
+                filename=doc.filename,
+                status=doc.status,
+                uploaded_at=doc.uploaded_at,
+                operational_context=doc.operational_context
+            ) for doc in documents]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/documents/{document_id}/plan")
+async def get_document_plan(document_id: str):
+    """Get the plan for a specific document"""
+    if not project_manager.get_current_project():
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    try:
+        with Session(engine) as session:
+            plan = session.exec(
+                select(DocumentPlan).where(DocumentPlan.document_id == document_id)
+            ).first()
+            
+            if not plan:
+                raise HTTPException(status_code=404, detail="Document plan not found")
+            
+            return {
+                "id": plan.id,
+                "document_id": plan.document_id,
+                "plan_data": json.loads(plan.plan_data),
+                "planning_confidence": plan.planning_confidence,
+                "total_chunks_analyzed": plan.total_chunks_analyzed,
+                "status": plan.status,
+                "created_at": plan.created_at.isoformat()
+            }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/data-modules", response_model=List[DataModuleResponse])
 async def get_data_modules(document_id: Optional[str] = None):
-    """Get data modules for current project, optionally filtered by document"""
+    """Get all data modules, optionally filtered by document"""
+    if not project_manager.get_current_project():
+        raise HTTPException(status_code=400, detail="No project selected")
+    
     engine = project_manager.get_current_engine()
     if not engine:
         raise HTTPException(status_code=400, detail="No project selected")
-        
-    with Session(engine) as session:
-        query = select(DataModule)
-        if document_id:
-            query = query.where(DataModule.document_id == document_id)
-        
-        modules = session.exec(query).all()
-        return modules
+    
+    try:
+        with Session(engine) as session:
+            query = select(DataModule)
+            if document_id:
+                query = query.where(DataModule.document_id == document_id)
+            
+            modules = session.exec(query).all()
+            return [DataModuleResponse(
+                id=module.id,
+                dmc=module.dmc,
+                title=module.title,
+                verbatim_content=module.verbatim_content,
+                ste_content=module.ste_content,
+                type=module.type,
+                prerequisites=module.prerequisites or "",
+                tools_equipment=module.tools_equipment or "",
+                warnings=module.warnings or "",
+                cautions=module.cautions or "",
+                procedural_steps=module.procedural_steps or "[]",
+                expected_results=module.expected_results or "",
+                specifications=module.specifications or "",
+                references=module.references or ""
+            ) for module in modules]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/icns", response_model=List[ICNResponse])
 async def get_icns(document_id: Optional[str] = None):
-    """Get ICNs for current project, optionally filtered by document"""
+    """Get all ICNs, optionally filtered by document"""
+    if not project_manager.get_current_project():
+        raise HTTPException(status_code=400, detail="No project selected")
+    
     engine = project_manager.get_current_engine()
     if not engine:
         raise HTTPException(status_code=400, detail="No project selected")
-        
-    with Session(engine) as session:
-        query = select(ICN)
-        if document_id:
-            query = query.where(ICN.document_id == document_id)
-        
-        icns = session.exec(query).all()
-        response = []
-        for icn in icns:
-            response.append(ICNResponse(
+    
+    try:
+        with Session(engine) as session:
+            query = select(ICN)
+            if document_id:
+                query = query.where(ICN.document_id == document_id)
+            
+            icns = session.exec(query).all()
+            return [ICNResponse(
                 id=icn.id,
                 icn=icn.icn,
                 caption=icn.caption,
-                objects=json.loads(icn.objects)
-            ))
-        return response
+                objects=json.loads(icn.objects) if icn.objects else []
+            ) for icn in icns]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time progress updates"""
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            # Handle any incoming messages if needed
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-
-# Global exception handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"Internal server error: {str(exc)}"}
-    )
-
-# Mount static files for serving the frontend
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8001)
