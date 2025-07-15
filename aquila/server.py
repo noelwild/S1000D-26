@@ -583,6 +583,17 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
                         sequence
                     )
                     
+                    # Send progress update for module creation
+                    await manager.broadcast({
+                        "type": "progress",
+                        "phase": "module_creation",
+                        "doc_id": doc_id,
+                        "detail": f"Creating data module: {result['title']}",
+                        "processing_type": "Module Creation",
+                        "current_text": f"DMC: {dmc} | Title: {result['title']} | Type: {result['type']}",
+                        "progress_section": f"{i+1}/{len(chunks)}"
+                    })
+                    
                     current_module = DataModule(
                         document_id=doc_id,
                         dmc=dmc,
@@ -636,24 +647,57 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
                         pass
             
             session.commit()
+            
+            # Send completion update for modules
+            await manager.broadcast({
+                "type": "progress",
+                "phase": "modules_created",
+                "doc_id": doc_id,
+                "detail": f"Created {sequence-1} data modules",
+                "processing_type": "Module Creation Complete",
+                "current_text": f"Successfully created {sequence-1} S1000D data modules"
+            })
         
         # Extract and process images
         await manager.broadcast({
             "type": "progress",
             "phase": "images_processing",
             "doc_id": doc_id,
-            "detail": "Extracting images from PDF..."
+            "detail": "Extracting images from PDF...",
+            "processing_type": "Image Extraction",
+            "current_text": "Scanning PDF for embedded images..."
         })
         
         images = extract_images_from_pdf(file_path)
         
+        if images:
+            await manager.broadcast({
+                "type": "progress",
+                "phase": "images_processing",
+                "doc_id": doc_id,
+                "detail": f"Found {len(images)} images, generating captions...",
+                "processing_type": "Image Analysis",
+                "current_text": f"Processing {len(images)} images with AI vision analysis"
+            })
+        
         with Session(engine) as session:
-            for image_path in images:
+            for i, image_path in enumerate(images):
                 try:
                     # Generate ICN
                     with open(image_path, 'rb') as img_file:
                         image_hash = hashlib.sha256(img_file.read()).hexdigest()[:8]
                     icn = f"ICN-{image_hash}"
+                    
+                    # Send progress update for image processing
+                    await manager.broadcast({
+                        "type": "progress",
+                        "phase": "image_analysis",
+                        "doc_id": doc_id,
+                        "detail": f"Analyzing image {i+1} of {len(images)}",
+                        "processing_type": "AI Vision Analysis",
+                        "current_text": f"Generating caption for image {icn}...",
+                        "progress_section": f"{i+1}/{len(images)}"
+                    })
                     
                     # Get caption and objects
                     vision_result = await caption_objects(image_path)
@@ -671,6 +715,18 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
                             objects=json.dumps(vision_result["objects"])
                         )
                         session.add(icn_record)
+                        
+                        # Send progress update with caption
+                        await manager.broadcast({
+                            "type": "progress",
+                            "phase": "image_analysis",
+                            "doc_id": doc_id,
+                            "detail": f"Generated caption for image {i+1}",
+                            "processing_type": "Image Caption Generated",
+                            "current_text": vision_result["caption"][:150] + "..." if len(vision_result["caption"]) > 150 else vision_result["caption"],
+                            "progress_section": f"{i+1}/{len(images)}"
+                        })
+                        
                 except Exception as e:
                     print(f"Error processing image {image_path}: {e}")
                     continue
@@ -687,7 +743,9 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
             "type": "progress",
             "phase": "finished",
             "doc_id": doc_id,
-            "detail": "Document processing completed successfully"
+            "detail": "Document processing completed successfully",
+            "processing_type": "Complete",
+            "current_text": "All processing stages completed. Document is ready for viewing."
         })
         
     except Exception as e:
@@ -702,7 +760,9 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
         await manager.broadcast({
             "type": "error",
             "doc_id": doc_id,
-            "detail": f"Document processing failed: {str(e)}"
+            "detail": f"Document processing failed: {str(e)}",
+            "processing_type": "Error",
+            "current_text": f"Processing failed: {str(e)}"
         })
 
 @app.get("/api/documents", response_model=List[DocumentResponse])
