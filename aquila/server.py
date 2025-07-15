@@ -6,7 +6,6 @@ import re
 import time
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from PIL.Image import Image
 import tempfile
 import uuid
 from datetime import datetime
