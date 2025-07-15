@@ -87,7 +87,15 @@
       "created_at": "2025-07-15T07:29:49.625823",
       "database_path": "projects/8b2b4013-67fb-4450-9de9-fd7e8ad4cb4d/aquila.db",
       "uploads_path": "projects/8b2b4013-67fb-4450-9de9-fd7e8ad4cb4d/uploads"
+    },
+    {
+      "id": "daa7cbbc-de8f-4178-aee9-49b7eb5e3829",
+      "name": "Enhanced Test Project",
+      "description": "Testing enhanced PDF processing system",
+      "created_at": "2025-07-15T07:35:40.099071",
+      "database_path": "projects/daa7cbbc-de8f-4178-aee9-49b7eb5e3829/aquila.db",
+      "uploads_path": "projects/daa7cbbc-de8f-4178-aee9-49b7eb5e3829/uploads"
     }
   ],
-  "current_project": "8b2b4013-67fb-4450-9de9-fd7e8ad4cb4d"
+  "current_project": "daa7cbbc-de8f-4178-aee9-49b7eb5e3829"
 }
