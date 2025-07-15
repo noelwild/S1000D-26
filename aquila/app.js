@@ -224,10 +224,14 @@ class AquilaApp {
 
     async loadProjects() {
         try {
+            console.log('Loading projects...');
             const response = await fetch('/api/projects');
             if (response.ok) {
                 this.projects = await response.json();
+                console.log('Projects loaded:', this.projects);
                 this.updateProjectsList();
+            } else {
+                console.error('Failed to load projects:', response.status);
             }
         } catch (error) {
             console.error('Error loading projects:', error);
@@ -236,6 +240,7 @@ class AquilaApp {
 
     updateProjectsList() {
         const container = document.getElementById('projectsList');
+        console.log('Updating projects list with', this.projects.length, 'projects');
         
         if (this.projects.length === 0) {
             container.innerHTML = `
