@@ -547,15 +547,18 @@ class AquilaApp {
     }
 
     async loadDataModules() {
-        if (!this.currentDocument || !this.currentProject) {
+        if (!this.currentDocument) {
+            console.log('No document selected, clearing modules');
             this.updateModulesList([]);
             return;
         }
         
         try {
+            console.log('Loading data modules for document:', this.currentDocument);
             const response = await fetch(`/api/data-modules?document_id=${this.currentDocument}`);
             if (response.ok) {
                 this.modules = await response.json();
+                console.log('Data modules loaded:', this.modules.length);
                 this.updateModulesList(this.modules);
             }
         } catch (error) {
