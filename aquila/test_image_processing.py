@@ -76,7 +76,7 @@ async def test_caption_objects():
     # First extract some images
     from server import extract_images_from_pdf
     
-    pdf_path = "test_maintenance_manual.pdf"
+    pdf_path = "tmpn48mr8t9.pdf"
     if not os.path.exists(pdf_path):
         print(f"❌ PDF file {pdf_path} not found")
         return False
