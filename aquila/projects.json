@@ -15,6 +15,14 @@
       "created_at": "2025-07-15T03:06:38.338276",
       "database_path": "projects/9d89d80a-3237-4b49-a218-ed61c927666a/aquila.db",
       "uploads_path": "projects/9d89d80a-3237-4b49-a218-ed61c927666a/uploads"
+    },
+    {
+      "id": "b0dbcad4-45f0-455d-8ef8-a2223afcf5bb",
+      "name": "Final Test Project",
+      "description": "Testing complete workflow",
+      "created_at": "2025-07-15T03:17:05.909772",
+      "database_path": "projects/b0dbcad4-45f0-455d-8ef8-a2223afcf5bb/aquila.db",
+      "uploads_path": "projects/b0dbcad4-45f0-455d-8ef8-a2223afcf5bb/uploads"
     }
   ],
   "current_project": null
