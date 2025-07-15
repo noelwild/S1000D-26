@@ -34,7 +34,11 @@ class AquilaApp {
             const response = await fetch('/api/projects/current');
             if (response.ok) {
                 const result = await response.json();
-                this.currentProject = result.current_project;
+                if (result.status === 'no_project_selected') {
+                    this.currentProject = null;
+                } else {
+                    this.currentProject = result;
+                }
                 this.updateProjectDisplay();
             }
         } catch (error) {
