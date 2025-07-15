@@ -598,7 +598,7 @@ async def get_projects():
     ) for p in projects]
 
 @app.post("/api/projects")
-async def create_project(name: str, description: str = ""):
+async def create_project(name: str = Form(...), description: str = Form("")):
     """Create a new project"""
     if not name or not name.strip():
         raise HTTPException(status_code=400, detail="Project name is required")
