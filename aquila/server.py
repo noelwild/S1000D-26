@@ -163,12 +163,12 @@ Analyze the given text and return a JSON response with the following structure:
   "info_code": "S1000D info code (040=description, 520=procedure, 730=fault_isolation, 710=theory, 320=maintenance_planning, 920=support_equipment)",
   "item_location": "S1000D item location code (A, B, C, etc.)",
   "ste": "Text rewritten in ASD-STE100 Simplified Technical English with controlled vocabulary",
-  "should_start_new_module": true/false,
+  "should_start_new_module": true,
   "prerequisites": "Prerequisites and initial conditions required",
   "tools_equipment": "Required tools, equipment, and consumables",
   "warnings": "Safety warnings and critical information",
   "cautions": "Important cautions and notes",
-  "procedural_steps": "Structured array of procedural steps in order",
+  "procedural_steps": [],
   "expected_results": "Expected outcomes and verification steps",
   "specifications": "Technical specifications and tolerances",
   "references": "Reference materials and related documents"
@@ -207,10 +207,19 @@ STE RULES:
             if field not in result:
                 result[field] = get_default_value(field)
         
+        # Ensure all text fields are strings
+        for field in ["prerequisites", "tools_equipment", "warnings", "cautions", "expected_results", "specifications", "references"]:
+            if field not in result:
+                result[field] = ""
+            elif not isinstance(result[field], str):
+                result[field] = str(result[field])
+        
         # Ensure procedural_steps is a JSON string
         if isinstance(result.get("procedural_steps"), list):
             result["procedural_steps"] = json.dumps(result["procedural_steps"])
         elif not result.get("procedural_steps"):
+            result["procedural_steps"] = json.dumps([])
+        elif not isinstance(result.get("procedural_steps"), str):
             result["procedural_steps"] = json.dumps([])
             
         return result
