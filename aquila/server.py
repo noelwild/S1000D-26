@@ -1569,6 +1569,10 @@ async def serve_app_js():
 async def serve_app_css():
     return FileResponse("app.css")
 
+@app.get("/app_fixed.js")
+async def serve_app_fixed_js():
+    return FileResponse("app_fixed.js")
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
