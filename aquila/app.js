@@ -521,14 +521,12 @@ class AquilaApp {
     }
 
     async loadDocuments() {
-        if (!this.currentProject) {
-            return;
-        }
-        
         try {
+            console.log('Loading documents...');
             const response = await fetch('/api/documents');
             if (response.ok) {
                 this.documents = await response.json();
+                console.log('Documents loaded:', this.documents);
                 this.updateDocumentSelect();
             }
         } catch (error) {
