@@ -181,6 +181,9 @@ class AquilaApp {
             return;
         }
         
+        // Hide the modal immediately when upload starts
+        this.hideUploadModal();
+        
         const formData = new FormData();
         formData.append('file', file);
         formData.append('operational_context', operationalContext);
@@ -193,7 +196,6 @@ class AquilaApp {
             
             if (response.ok) {
                 const result = await response.json();
-                this.hideUploadModal();
                 this.showProgress('upload_complete', 'Upload started');
                 console.log('Upload successful:', result);
             } else {
