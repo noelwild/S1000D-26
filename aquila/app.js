@@ -451,6 +451,52 @@ class AquilaApp {
         }
     }
 
+    async loadDocumentPlan(documentId) {
+        if (!documentId || !this.currentProject) {
+            return null;
+        }
+        
+        try {
+            const response = await fetch(`/api/documents/${documentId}/plan`);
+            if (response.ok) {
+                const plan = await response.json();
+                return plan;
+            }
+        } catch (error) {
+            console.error('Error loading document plan:', error);
+        }
+        return null;
+    }
+    
+    displayPlanPreview(planData) {
+        const container = document.getElementById('planPreview');
+        if (!container) return;
+        
+        const modules = planData.plan_data.planned_modules || [];
+        const confidence = planData.plan_data.planning_confidence || 0;
+        
+        container.innerHTML = `
+            <div class="bg-gray-800 p-4 rounded-lg mb-4">
+                <h3 class="text-lg font-semibold mb-2">Document Plan Preview</h3>
+                <div class="text-sm text-gray-300 mb-3">
+                    <span>Confidence: ${(confidence * 100).toFixed(1)}%</span>
+                    <span class="ml-4">Modules: ${modules.length}</span>
+                </div>
+                <div class="space-y-2">
+                    ${modules.map((module, index) => `
+                        <div class="bg-gray-700 p-3 rounded">
+                            <div class="font-medium">${module.title}</div>
+                            <div class="text-sm text-gray-400 mt-1">${module.description}</div>
+                            <div class="text-xs text-gray-500 mt-1">
+                                Type: ${module.type} | Priority: ${module.priority || 'medium'}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     async loadDocuments() {
         if (!this.currentProject) {
             return;
