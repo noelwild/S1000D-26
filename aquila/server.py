@@ -598,44 +598,200 @@ def calculate_sha256(file_path: str) -> str:
             sha256_hash.update(byte_block)
     return sha256_hash.hexdigest()
 
-def chunk_text(text: str) -> List[str]:
-    """Simple text chunking based on page breaks and headings"""
-    chunks = []
+class TextCleaner:
+    """Advanced text cleaning to remove headers, footers, page numbers"""
     
-    # Split by double newlines first
-    sections = text.split('\n\n')
-    
-    current_chunk = ""
-    for section in sections:
-        section = section.strip()
-        if not section:
-            continue
-            
-        # Check if this looks like a heading (short line, all caps, etc.)
-        is_heading = (
-            len(section) < 100 and 
-            (section.isupper() or 
-             re.match(r'^\d+\.', section) or
-             re.match(r'^[A-Z][A-Z\s]{5,50}$', section))
-        )
+    def __init__(self):
+        self.encoding = tiktoken.encoding_for_model("gpt-4")
         
-        # If adding this section would exceed 4k tokens (~3200 chars), start new chunk
-        if len(current_chunk) + len(section) > 3200:
-            if current_chunk:
+    def clean_extracted_text(self, raw_text: str) -> Dict[str, str]:
+        """
+        Clean text by removing:
+        - Headers and footers (repeated content)
+        - Page numbers
+        - Navigation elements
+        - Metadata stamps
+        """
+        lines = raw_text.split('\n')
+        cleaned_lines = []
+        removed_elements = []
+        
+        # Patterns for common non-content elements
+        page_number_patterns = [
+            r'^\s*\d+\s*$',  # Just a number
+            r'^\s*Page\s+\d+\s*$',  # "Page X"
+            r'^\s*\d+\s*of\s*\d+\s*$',  # "X of Y"
+            r'^\s*-\s*\d+\s*-\s*$',  # "- X -"
+        ]
+        
+        header_footer_patterns = [
+            r'^[A-Z\s]{10,}$',  # All caps headers
+            r'^\s*[A-Z]+\s+\d+\s*$',  # Manual reference codes
+            r'^\s*TM\s+\d+',  # Technical manual references
+            r'^\s*Figure\s+\d+',  # Figure references at start of line
+            r'^\s*Table\s+\d+',  # Table references
+            r'^\s*WARNING\s*$',  # Standalone WARNING
+            r'^\s*CAUTION\s*$',  # Standalone CAUTION
+            r'^\s*NOTE\s*$',  # Standalone NOTE
+        ]
+        
+        # Track repeated content (potential headers/footers)
+        line_frequency = {}
+        for line in lines:
+            stripped = line.strip()
+            if stripped and len(stripped) > 3:
+                line_frequency[stripped] = line_frequency.get(stripped, 0) + 1
+        
+        # Find lines that appear multiple times (likely headers/footers)
+        repeated_lines = {line for line, count in line_frequency.items() if count > 2 and len(line) < 100}
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Skip empty lines
+            if not stripped:
+                continue
+                
+            # Check if it's a page number
+            is_page_number = any(re.match(pattern, stripped, re.IGNORECASE) for pattern in page_number_patterns)
+            if is_page_number:
+                removed_elements.append(f"Page number: {stripped}")
+                continue
+                
+            # Check if it's a header/footer pattern
+            is_header_footer = any(re.match(pattern, stripped, re.IGNORECASE) for pattern in header_footer_patterns)
+            if is_header_footer:
+                removed_elements.append(f"Header/Footer: {stripped}")
+                continue
+                
+            # Check if it's repeated content
+            if stripped in repeated_lines:
+                removed_elements.append(f"Repeated content: {stripped}")
+                continue
+                
+            # Keep the line
+            cleaned_lines.append(line)
+        
+        clean_text = '\n'.join(cleaned_lines)
+        
+        # Additional cleaning
+        clean_text = re.sub(r'\n{3,}', '\n\n', clean_text)  # Multiple newlines to double
+        clean_text = re.sub(r'[ \t]+', ' ', clean_text)  # Multiple spaces to single
+        clean_text = clean_text.strip()
+        
+        return {
+            "clean_text": clean_text,
+            "removed_elements": removed_elements,
+            "cleaning_report": f"Removed {len(removed_elements)} non-content elements"
+        }
+
+class ChunkingStrategy:
+    """Dual chunking approach for planning and population phases"""
+    
+    def __init__(self):
+        self.encoding = tiktoken.encoding_for_model("gpt-4")
+        
+    def count_tokens(self, text: str) -> int:
+        """Count tokens in text"""
+        return len(self.encoding.encode(text))
+    
+    def create_planning_chunks(self, text: str) -> List[str]:
+        """
+        Create large chunks for planning phase:
+        - 2000 tokens per chunk
+        - 200 token overlap between chunks
+        - Maintain context for comprehensive planning
+        """
+        return self._create_chunks(text, target_tokens=2000, overlap_tokens=200)
+    
+    def create_population_chunks(self, text: str) -> List[str]:
+        """
+        Create smaller chunks for population phase:
+        - 400 tokens per chunk
+        - 50 token overlap between chunks
+        - Optimized for detailed content extraction
+        """
+        return self._create_chunks(text, target_tokens=400, overlap_tokens=50)
+    
+    def _create_chunks(self, text: str, target_tokens: int, overlap_tokens: int) -> List[str]:
+        """Create chunks with specified token limits and overlap"""
+        chunks = []
+        sentences = self._split_into_sentences(text)
+        
+        current_chunk = ""
+        current_tokens = 0
+        
+        for sentence in sentences:
+            sentence_tokens = self.count_tokens(sentence)
+            
+            # If adding this sentence would exceed target, start new chunk
+            if current_tokens + sentence_tokens > target_tokens and current_chunk:
                 chunks.append(current_chunk.strip())
-            current_chunk = section
-        else:
-            if current_chunk and is_heading:
-                # Start new chunk on headings
-                chunks.append(current_chunk.strip())
-                current_chunk = section
+                
+                # Create overlap for next chunk
+                overlap_text = self._create_overlap(current_chunk, overlap_tokens)
+                current_chunk = overlap_text + sentence
+                current_tokens = self.count_tokens(current_chunk)
             else:
-                current_chunk += "\n\n" + section if current_chunk else section
+                current_chunk += sentence
+                current_tokens += sentence_tokens
+        
+        # Add the last chunk if it has content
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        return chunks
     
-    if current_chunk:
-        chunks.append(current_chunk.strip())
+    def _split_into_sentences(self, text: str) -> List[str]:
+        """Split text into sentences while preserving structure"""
+        # Split by periods, but be careful about abbreviations
+        sentences = []
+        current_sentence = ""
+        
+        for char in text:
+            current_sentence += char
+            
+            # Check for sentence endings
+            if char in '.!?':
+                # Look ahead to see if this is really a sentence end
+                # (not just an abbreviation)
+                if len(current_sentence.strip()) > 10:  # Minimum sentence length
+                    sentences.append(current_sentence)
+                    current_sentence = ""
+            elif char == '\n':
+                # Paragraph breaks
+                if current_sentence.strip():
+                    sentences.append(current_sentence)
+                    current_sentence = ""
+        
+        # Add any remaining text
+        if current_sentence.strip():
+            sentences.append(current_sentence)
+        
+        return sentences
     
-    return chunks
+    def _create_overlap(self, text: str, overlap_tokens: int) -> str:
+        """Create overlap text from the end of current chunk"""
+        tokens = self.encoding.encode(text)
+        if len(tokens) <= overlap_tokens:
+            return text
+        
+        # Get the last overlap_tokens tokens
+        overlap_token_ids = tokens[-overlap_tokens:]
+        overlap_text = self.encoding.decode(overlap_token_ids)
+        
+        # Try to start at a sentence boundary
+        sentences = overlap_text.split('.')
+        if len(sentences) > 1:
+            # Start from the second sentence to avoid partial sentences
+            return '.'.join(sentences[1:]).strip()
+        
+        return overlap_text
+
+def chunk_text(text: str) -> List[str]:
+    """Legacy function maintained for backward compatibility"""
+    chunker = ChunkingStrategy()
+    return chunker.create_planning_chunks(text)
 
 def generate_dmc(context: str, type_info: str, info_code: str, item_loc: str, sequence: int) -> str:
     """Generate DMC according to S1000D standards"""
