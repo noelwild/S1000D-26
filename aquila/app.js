@@ -35,13 +35,17 @@ class AquilaApp {
 
     async checkCurrentProject() {
         try {
+            console.log('Checking current project...');
             const response = await fetch('/api/projects/current');
             if (response.ok) {
                 const result = await response.json();
+                console.log('Current project API response:', result);
                 if (result.status === 'no_project_selected') {
                     this.currentProject = null;
+                    console.log('No project selected');
                 } else {
                     this.currentProject = result;
+                    console.log('Current project set to:', this.currentProject);
                 }
                 this.updateProjectDisplay();
             }
