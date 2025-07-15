@@ -427,7 +427,41 @@ def get_default_value(field: str) -> Any:
 
 async def caption_objects(image_path: str) -> Dict[str, Any]:
     """Generate caption and detect objects in image"""
+    from PIL import Image
+    import io
+    
     try:
+        # Verify and potentially convert the image before sending to OpenAI
+        try:
+            # Open and verify the image
+            with Image.open(image_path) as img:
+                img.verify()
+            
+            # Re-open for processing (verify() closes the image)
+            with Image.open(image_path) as img:
+                # Ensure the image is in a format OpenAI supports
+                if img.format not in ['JPEG', 'PNG', 'GIF', 'WEBP']:
+                    print(f"Converting image from {img.format} to JPEG for OpenAI compatibility")
+                    
+                    # Convert to RGB if necessary
+                    if img.mode in ('RGBA', 'LA', 'P'):
+                        rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                        if img.mode == 'P':
+                            img = img.convert('RGBA')
+                        rgb_img.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                        img = rgb_img
+                    elif img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    
+                    # Save as JPEG
+                    temp_path = image_path.rsplit('.', 1)[0] + '_converted.jpg'
+                    img.save(temp_path, 'JPEG', quality=85, optimize=True)
+                    image_path = temp_path
+        
+        except Exception as img_error:
+            print(f"Image verification/conversion error: {img_error}")
+            # Continue with original path and hope for the best
+        
         client = openai.OpenAI(api_key=openai.api_key)
         
         with open(image_path, "rb") as image_file:
@@ -466,6 +500,7 @@ async def caption_objects(image_path: str) -> Dict[str, Any]:
         
         result = json.loads(response.choices[0].message.content)
         return result
+        
     except Exception as e:
         print(f"OpenAI caption_objects error: {e}")
         # Fallback response
