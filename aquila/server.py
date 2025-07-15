@@ -527,7 +527,10 @@ def generate_dmc(context: str, type_info: str, info_code: str, item_loc: str, se
     return f"{context}-{type_info}-{info_code}-{item_loc}-{sequence:02d}"
 
 def extract_images_from_pdf(pdf_path: str) -> List[str]:
-    """Extract images from PDF and save them"""
+    """Extract images from PDF and save them in a format supported by OpenAI"""
+    from PIL import Image
+    import io
+    
     images = []
     try:
         with open(pdf_path, 'rb') as file:
@@ -554,11 +557,43 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
                                     
                                     image_path = upload_dir / filename
                                     
-                                    # Save image
-                                    with open(image_path, 'wb') as img_file:
-                                        img_file.write(data)
-                                    
-                                    images.append(str(image_path))
+                                    # Convert image to JPEG format using PIL
+                                    try:
+                                        # Try to open the image data with PIL
+                                        image = Image.open(io.BytesIO(data))
+                                        
+                                        # Convert to RGB if necessary (for JPEG compatibility)
+                                        if image.mode in ('RGBA', 'LA', 'P'):
+                                            # Convert to RGB for JPEG
+                                            rgb_image = Image.new('RGB', image.size, (255, 255, 255))
+                                            if image.mode == 'P':
+                                                image = image.convert('RGBA')
+                                            rgb_image.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
+                                            image = rgb_image
+                                        elif image.mode != 'RGB':
+                                            image = image.convert('RGB')
+                                        
+                                        # Save as JPEG with good quality
+                                        image.save(image_path, 'JPEG', quality=85, optimize=True)
+                                        images.append(str(image_path))
+                                        
+                                    except Exception as pil_error:
+                                        print(f"PIL conversion failed for image {image_hash}: {pil_error}")
+                                        # Fallback: try to save raw data and hope it works
+                                        try:
+                                            with open(image_path, 'wb') as img_file:
+                                                img_file.write(data)
+                                            # Verify it's a valid image by trying to open it
+                                            test_image = Image.open(image_path)
+                                            test_image.verify()
+                                            images.append(str(image_path))
+                                        except Exception as fallback_error:
+                                            print(f"Fallback save failed for image {image_hash}: {fallback_error}")
+                                            # Clean up failed file
+                                            if image_path.exists():
+                                                image_path.unlink()
+                                            continue
+                                            
                             except Exception as e:
                                 print(f"Error extracting image: {e}")
                                 continue
