@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 import re
 import shutil
+import tiktoken
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect, Request, Form, Form
 from fastapi.staticfiles import StaticFiles
