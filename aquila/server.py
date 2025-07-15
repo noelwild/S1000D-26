@@ -753,8 +753,10 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
     
     return images
 
-def _process_and_save_image(image: Image, image_path: Path, image_hash: str) -> bool:
+def _process_and_save_image(image, image_path: Path, image_hash: str) -> bool:
     """Process and save an image with proper format conversion"""
+    from PIL import Image
+    
     try:
         # Ensure we have a valid image
         if not image or image.size[0] == 0 or image.size[1] == 0:
