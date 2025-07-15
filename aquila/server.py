@@ -202,8 +202,6 @@ class DocumentPlan(SQLModel, table=True):
 class DataModule(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     document_id: str = Field(foreign_key="document.id")
-    plan_id: Optional[str] = Field(foreign_key="documentplan.id", default=None)
-    module_id: str  # From planning phase
     dmc: str  # Data Module Code
     title: str
     info_code: str
@@ -224,13 +222,6 @@ class DataModule(SQLModel, table=True):
     # Technical data
     specifications: Optional[str] = Field(default="")  # Technical specifications
     references: Optional[str] = Field(default="")  # Reference materials
-    
-    # Enhanced fields for new system
-    content_sources: Optional[str] = Field(default="")  # JSON string of source chunks
-    completeness_score: Optional[float] = Field(default=0.0)  # 0.0-1.0 completeness
-    relevant_chunks_found: Optional[int] = Field(default=0)
-    total_chunks_analyzed: Optional[int] = Field(default=0)
-    population_status: Optional[str] = Field(default="pending")  # pending, complete, partial, error
     
     created_at: datetime = Field(default_factory=datetime.now)
 
