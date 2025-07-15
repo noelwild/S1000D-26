@@ -56,6 +56,16 @@ class ProjectManager:
         # Load current project from config on startup
         self.load_current_project_from_config()
         
+    def load_current_project_from_config(self):
+        """Load current project from config on startup"""
+        try:
+            config = self.load_projects_config()
+            current_project_id = config.get("current_project")
+            if current_project_id:
+                self.set_current_project(current_project_id)
+        except Exception as e:
+            print(f"Error loading current project from config: {e}")
+    
     def ensure_projects_directory(self):
         """Ensure projects directory exists"""
         self.projects_dir.mkdir(exist_ok=True)
