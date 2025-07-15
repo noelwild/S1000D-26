@@ -1713,56 +1713,66 @@ async def get_document_plan(doc_id: str) -> Dict[str, Any]:
 
 @app.post("/api/documents/upload", response_model=Dict[str, Any])
 async def upload_document(file: UploadFile = File(...), operational_context: str = "Water"):
-    """Upload and process a PDF document"""
+    """Upload and process a PDF document with enhanced two-phase processing"""
     # Check if project is selected
     if not project_manager.get_current_project():
-        raise HTTPException(status_code=400, detail="No project selected. Please select a project first.")
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    # Validate file type
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    
+    # Save uploaded file
+    upload_dir = Path(project_manager.get_uploads_path())
+    upload_dir.mkdir(exist_ok=True)
+    
+    file_path = upload_dir / file.filename
+    
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+    
+    # Calculate file hash for deduplication
+    file_hash = calculate_sha256(str(file_path))
+    
+    # Check for duplicates
+    with Session(engine) as session:
+        existing_doc = session.exec(
+            select(Document).where(Document.sha256 == file_hash)
+        ).first()
         
-    try:
-        # Create project-specific upload directory
-        upload_dir = Path(project_manager.get_uploads_path())
-        upload_dir.mkdir(exist_ok=True)
+        if existing_doc:
+            return {
+                "status": "duplicate",
+                "message": "Document already exists",
+                "document_id": existing_doc.id
+            }
         
-        # Calculate SHA-256 and save file
-        temp_path = upload_dir / f"temp_{file.filename}"
-        with open(temp_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        file_hash = calculate_sha256(str(temp_path))
-        final_path = upload_dir / f"{file_hash}.pdf"
-        temp_path.rename(final_path)
-        
-        # Create document record in current project's database
-        engine = project_manager.get_current_engine()
-        with Session(engine) as session:
-            document = Document(
-                filename=file.filename,
-                file_path=str(final_path),
-                sha256=file_hash,
-                operational_context=operational_context,
-                status="processing"
-            )
-            session.add(document)
-            session.commit()
-            session.refresh(document)
-            doc_id = document.id
-        
-        # Broadcast upload complete
-        await manager.broadcast({
-            "type": "progress",
-            "phase": "upload_complete",
-            "doc_id": doc_id,
-            "detail": f"File {file.filename} uploaded successfully"
-        })
-        
-        # Process document asynchronously
-        asyncio.create_task(process_document(doc_id, str(final_path), operational_context))
-        
-        return {"document_id": doc_id, "status": "processing"}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Create document record
+        document = Document(
+            filename=file.filename,
+            file_path=str(file_path),
+            sha256=file_hash,
+            operational_context=operational_context,
+            status="processing"
+        )
+        session.add(document)
+        session.commit()
+        session.refresh(document)
+        doc_id = document.id
+    
+    # Start asynchronous processing with new two-phase system
+    asyncio.create_task(process_document_enhanced(doc_id, str(file_path), operational_context))
+    
+    return {
+        "status": "upload_successful",
+        "document_id": doc_id,
+        "message": "Document uploaded successfully. Processing will begin shortly."
+    }
 
 def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> Optional[DataModule]:
     """Find the most appropriate data module for an image based on its caption"""
