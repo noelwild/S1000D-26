@@ -208,8 +208,20 @@ STE RULES:
             print("DEBUG: Empty response from OpenAI")
             raise ValueError("Empty response from OpenAI")
         
+        # Clean up the response - remove markdown code blocks if present
+        cleaned_response = raw_response.strip()
+        if cleaned_response.startswith("```json"):
+            cleaned_response = cleaned_response[7:]  # Remove ```json
+        if cleaned_response.startswith("```"):
+            cleaned_response = cleaned_response[3:]  # Remove ```
+        if cleaned_response.endswith("```"):
+            cleaned_response = cleaned_response[:-3]  # Remove ending ```
+        cleaned_response = cleaned_response.strip()
+        
+        print(f"DEBUG: Cleaned response: {cleaned_response}")
+        
         # Try to parse JSON
-        result = json.loads(raw_response)
+        result = json.loads(cleaned_response)
         
         # Validate required fields and set defaults
         required_fields = ["type", "title", "info_code", "item_location", "ste", "should_start_new_module"]
