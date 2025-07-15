@@ -1098,6 +1098,12 @@ class ContentPopulator:
             cleaned_response = self._clean_json_response(raw_response)
             result = json.loads(cleaned_response)
             
+            # Ensure procedural_steps is always a JSON string
+            if isinstance(result.get("procedural_steps"), list):
+                result["procedural_steps"] = json.dumps(result["procedural_steps"])
+            elif not isinstance(result.get("procedural_steps"), str):
+                result["procedural_steps"] = json.dumps([])
+            
             return result
             
         except Exception as e:
