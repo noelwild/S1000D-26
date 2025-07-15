@@ -8,6 +8,7 @@ import tempfile
 import uuid
 from datetime import datetime
 import re
+import shutil
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
@@ -37,6 +38,132 @@ try:
 except Exception as e:
     print(f"Warning: {e}")
     openai.api_key = "test-key"  # Fallback for testing
+
+# Project Management
+PROJECTS_DIR = Path("projects")
+PROJECTS_CONFIG_FILE = "projects.json"
+
+class ProjectManager:
+    def __init__(self):
+        self.projects_dir = PROJECTS_DIR
+        self.projects_config = PROJECTS_CONFIG_FILE
+        self.current_project = None
+        self.current_engine = None
+        self.ensure_projects_directory()
+        
+    def ensure_projects_directory(self):
+        """Ensure projects directory exists"""
+        self.projects_dir.mkdir(exist_ok=True)
+        
+    def load_projects_config(self) -> Dict[str, Any]:
+        """Load projects configuration"""
+        if Path(self.projects_config).exists():
+            try:
+                with open(self.projects_config, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                return {"projects": [], "current_project": None}
+        return {"projects": [], "current_project": None}
+        
+    def save_projects_config(self, config: Dict[str, Any]):
+        """Save projects configuration"""
+        with open(self.projects_config, 'w') as f:
+            json.dump(config, f, indent=2)
+            
+    def create_project(self, name: str, description: str = "") -> Dict[str, Any]:
+        """Create a new project"""
+        project_id = str(uuid.uuid4())
+        project_dir = self.projects_dir / project_id
+        project_dir.mkdir(exist_ok=True)
+        
+        # Create project uploads directory
+        uploads_dir = project_dir / "uploads"
+        uploads_dir.mkdir(exist_ok=True)
+        
+        project_data = {
+            "id": project_id,
+            "name": name,
+            "description": description,
+            "created_at": datetime.now().isoformat(),
+            "database_path": str(project_dir / "aquila.db"),
+            "uploads_path": str(uploads_dir)
+        }
+        
+        # Load and update projects config
+        config = self.load_projects_config()
+        config["projects"].append(project_data)
+        self.save_projects_config(config)
+        
+        return project_data
+        
+    def get_projects(self) -> List[Dict[str, Any]]:
+        """Get all projects"""
+        config = self.load_projects_config()
+        return config.get("projects", [])
+        
+    def get_project(self, project_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific project"""
+        projects = self.get_projects()
+        return next((p for p in projects if p["id"] == project_id), None)
+        
+    def delete_project(self, project_id: str) -> bool:
+        """Delete a project"""
+        project = self.get_project(project_id)
+        if not project:
+            return False
+            
+        # Remove project directory
+        project_dir = self.projects_dir / project_id
+        if project_dir.exists():
+            shutil.rmtree(project_dir)
+            
+        # Update projects config
+        config = self.load_projects_config()
+        config["projects"] = [p for p in config["projects"] if p["id"] != project_id]
+        if config.get("current_project") == project_id:
+            config["current_project"] = None
+            
+        self.save_projects_config(config)
+        return True
+        
+    def set_current_project(self, project_id: str) -> bool:
+        """Set current project and initialize database"""
+        project = self.get_project(project_id)
+        if not project:
+            return False
+            
+        self.current_project = project
+        
+        # Initialize database engine for this project
+        database_url = f"sqlite:///{project['database_path']}"
+        self.current_engine = create_engine(database_url)
+        
+        # Create tables if they don't exist
+        SQLModel.metadata.create_all(self.current_engine)
+        
+        # Update current project in config
+        config = self.load_projects_config()
+        config["current_project"] = project_id
+        self.save_projects_config(config)
+        
+        return True
+        
+    def get_current_project(self) -> Optional[Dict[str, Any]]:
+        """Get current project"""
+        return self.current_project
+        
+    def get_current_engine(self):
+        """Get current database engine"""
+        return self.current_engine
+        
+    def get_uploads_path(self) -> str:
+        """Get uploads path for current project"""
+        if self.current_project:
+            return self.current_project["uploads_path"]
+        return "/tmp/aquila_uploads"
+
+# Initialize project manager
+project_manager = ProjectManager()
 
 # Database Models
 class Document(SQLModel, table=True):
@@ -85,6 +212,12 @@ class ICN(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
 
 # Response Models
+class ProjectResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    created_at: str
+
 class DocumentResponse(BaseModel):
     id: str
     filename: str
@@ -113,13 +246,6 @@ class ICNResponse(BaseModel):
     icn: str
     caption: str
     objects: List[str]
-
-# Database setup
-DATABASE_URL = "sqlite:///aquila.db"
-engine = create_engine(DATABASE_URL)
-
-def create_db_and_tables():
-    SQLModel.metadata.create_all(engine)
 
 # WebSocket manager
 class ConnectionManager:
@@ -422,8 +548,8 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
                                     image_hash = hashlib.sha256(data).hexdigest()[:8]
                                     filename = f"image_{page_num}_{image_hash}.jpg"
                                     
-                                    # Create uploads directory
-                                    upload_dir = Path("/tmp/aquila_uploads")
+                                    # Use project-specific upload directory
+                                    upload_dir = Path(project_manager.get_uploads_path())
                                     upload_dir.mkdir(exist_ok=True)
                                     
                                     image_path = upload_dir / filename
@@ -443,20 +569,12 @@ def extract_images_from_pdf(pdf_path: str) -> List[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize database
-    create_db_and_tables()
-    
-    # Create upload directory
-    upload_dir = Path("/tmp/aquila_uploads")
-    upload_dir.mkdir(exist_ok=True)
-    
-    print("Aquila S1000D-AI initialized successfully")
+    print("Aquila S1000D-AI with Project Management initialized successfully")
     yield
-    
     print("Shutting down Aquila S1000D-AI")
 
 # FastAPI app
-app = FastAPI(title="Aquila S1000D-AI", lifespan=lifespan)
+app = FastAPI(title="Aquila S1000D-AI with Project Management", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -467,17 +585,84 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Routes
+# Project Management API Routes
+@app.get("/api/projects", response_model=List[ProjectResponse])
+async def get_projects():
+    """Get all projects"""
+    projects = project_manager.get_projects()
+    return [ProjectResponse(
+        id=p["id"],
+        name=p["name"],
+        description=p.get("description", ""),
+        created_at=p["created_at"]
+    ) for p in projects]
+
+@app.post("/api/projects")
+async def create_project(name: str, description: str = ""):
+    """Create a new project"""
+    if not name or not name.strip():
+        raise HTTPException(status_code=400, detail="Project name is required")
+    
+    project = project_manager.create_project(name.strip(), description.strip())
+    return ProjectResponse(
+        id=project["id"],
+        name=project["name"],
+        description=project.get("description", ""),
+        created_at=project["created_at"]
+    )
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    """Delete a project"""
+    success = project_manager.delete_project(project_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"message": "Project deleted successfully"}
+
+@app.post("/api/projects/{project_id}/select")
+async def select_project(project_id: str):
+    """Select a project as current"""
+    success = project_manager.set_current_project(project_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"message": "Project selected successfully"}
+
+@app.get("/api/projects/current")
+async def get_current_project():
+    """Get current project"""
+    project = project_manager.get_current_project()
+    if not project:
+        return {"current_project": None}
+    
+    return {
+        "current_project": ProjectResponse(
+            id=project["id"],
+            name=project["name"],
+            description=project.get("description", ""),
+            created_at=project["created_at"]
+        )
+    }
+
+# Application API Routes
 @app.get("/api/health")
 async def health_check():
-    return {"status": "healthy", "service": "Aquila S1000D-AI"}
+    current_project = project_manager.get_current_project()
+    return {
+        "status": "healthy", 
+        "service": "Aquila S1000D-AI",
+        "current_project": current_project["name"] if current_project else None
+    }
 
 @app.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...), operational_context: str = "Water"):
     """Upload and process a PDF document"""
+    # Check if project is selected
+    if not project_manager.get_current_project():
+        raise HTTPException(status_code=400, detail="No project selected. Please select a project first.")
+        
     try:
-        # Create upload directory
-        upload_dir = Path("/tmp/aquila_uploads")
+        # Create project-specific upload directory
+        upload_dir = Path(project_manager.get_uploads_path())
         upload_dir.mkdir(exist_ok=True)
         
         # Calculate SHA-256 and save file
@@ -490,7 +675,8 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
         final_path = upload_dir / f"{file_hash}.pdf"
         temp_path.rename(final_path)
         
-        # Create document record
+        # Create document record in current project's database
+        engine = project_manager.get_current_engine()
         with Session(engine) as session:
             document = Document(
                 filename=file.filename,
@@ -519,17 +705,6 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> Optional[DataModule]:
-    """Find the most appropriate data module for an image based on its caption"""
-    modules = session.exec(select(DataModule).where(DataModule.document_id == doc_id)).all()
-    
-    if not modules:
-        return None
-    
-    # For now, return the first module
-    # TODO: Implement more sophisticated matching based on caption content and module context
-    return modules[0]
 
 def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> Optional[DataModule]:
     """Find the most appropriate data module for an image based on its caption"""
@@ -569,6 +744,9 @@ def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> O
 async def process_document(doc_id: str, file_path: str, operational_context: str):
     """Process the uploaded PDF document with improved S1000D compliance"""
     try:
+        # Get current project's database engine
+        engine = project_manager.get_current_engine()
+        
         # Extract text
         await manager.broadcast({
             "type": "progress",
@@ -804,6 +982,7 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
         print(f"Error processing document {doc_id}: {e}")
         
         # Update document status to failed
+        engine = project_manager.get_current_engine()
         with Session(engine) as session:
             document = session.get(Document, doc_id)
             document.status = "failed"
@@ -819,14 +998,22 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
 
 @app.get("/api/documents", response_model=List[DocumentResponse])
 async def get_documents():
-    """Get all documents"""
+    """Get all documents for current project"""
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+        
     with Session(engine) as session:
         documents = session.exec(select(Document)).all()
         return documents
 
 @app.get("/api/data-modules", response_model=List[DataModuleResponse])
 async def get_data_modules(document_id: Optional[str] = None):
-    """Get data modules, optionally filtered by document"""
+    """Get data modules for current project, optionally filtered by document"""
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+        
     with Session(engine) as session:
         query = select(DataModule)
         if document_id:
@@ -837,7 +1024,11 @@ async def get_data_modules(document_id: Optional[str] = None):
 
 @app.get("/api/icns", response_model=List[ICNResponse])
 async def get_icns(document_id: Optional[str] = None):
-    """Get ICNs, optionally filtered by document"""
+    """Get ICNs for current project, optionally filtered by document"""
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+        
     with Session(engine) as session:
         query = select(ICN)
         if document_id:
