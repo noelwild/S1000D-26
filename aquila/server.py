@@ -1208,13 +1208,18 @@ class ContentPopulator:
             cleaned_response = self._clean_json_response(raw_response)
             result = json.loads(cleaned_response)
             
-            # Generate DMC
+            # Generate DMC - fix the sequence parsing
+            try:
+                sequence = int(planned_module.get("module_id", "1").split("_")[-1]) if "_" in str(planned_module.get("module_id", "1")) else 1
+            except (ValueError, AttributeError):
+                sequence = 1
+            
             dmc = generate_dmc(
                 operational_context,
                 planned_module.get("type", "description"),
                 planned_module.get("info_code", "040"),
                 planned_module.get("item_location", "A"),
-                int(planned_module.get("module_id", "1"))
+                sequence
             )
             
             # Combine planned module with populated content
