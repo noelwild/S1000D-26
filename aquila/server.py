@@ -788,6 +788,203 @@ class ChunkingStrategy:
         
         return overlap_text
 
+class DocumentPlanner:
+    """AI-powered planning system for data module structure"""
+    
+    def __init__(self):
+        self.client = openai.OpenAI(api_key=openai.api_key)
+        self.chunker = ChunkingStrategy()
+        
+    async def analyze_and_plan(self, clean_text: str, operational_context: str) -> Dict[str, Any]:
+        """
+        Analyze document using large chunks (2000 tokens/200 overlap) and create planning JSON
+        """
+        # Create planning chunks
+        planning_chunks = self.chunker.create_planning_chunks(clean_text)
+        
+        # Initialize planning data
+        planning_data = {
+            "planned_modules": [],
+            "document_summary": "",
+            "total_planning_chunks": len(planning_chunks),
+            "planning_confidence": 0.0,
+            "operational_context": operational_context
+        }
+        
+        # Process each chunk to build comprehensive plan
+        for i, chunk in enumerate(planning_chunks):
+            chunk_plan = await self._analyze_chunk_for_planning(chunk, planning_data, i + 1, len(planning_chunks))
+            
+            # Merge chunk plan with overall plan
+            if i == 0:
+                # First chunk - establish initial plan
+                planning_data["planned_modules"] = chunk_plan.get("planned_modules", [])
+                planning_data["document_summary"] = chunk_plan.get("document_summary", "")
+                planning_data["planning_confidence"] = chunk_plan.get("planning_confidence", 0.0)
+            else:
+                # Subsequent chunks - refine and expand plan
+                planning_data = await self._merge_chunk_plan(planning_data, chunk_plan)
+        
+        return planning_data
+    
+    async def _analyze_chunk_for_planning(self, chunk: str, existing_plan: Dict[str, Any], 
+                                        chunk_num: int, total_chunks: int) -> Dict[str, Any]:
+        """Analyze a single chunk for planning purposes"""
+        
+        # Prepare context for AI
+        context_prompt = ""
+        if chunk_num > 1:
+            context_prompt = f"""
+            EXISTING PLAN CONTEXT:
+            This is chunk {chunk_num} of {total_chunks}. Here's what we've planned so far:
+            
+            Existing modules: {json.dumps([{"title": m["title"], "description": m["description"]} for m in existing_plan.get("planned_modules", [])], indent=2)}
+            
+            Document summary so far: {existing_plan.get("document_summary", "")}
+            
+            Please analyze this new chunk and either:
+            1. Suggest NEW modules if this chunk contains distinctly different content
+            2. Suggest REFINEMENTS to existing modules if this chunk provides additional context
+            3. Indicate if this chunk should be MERGED with existing modules
+            
+            """
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""You are an expert in S1000D technical documentation planning. 
+                        
+                        Analyze the given text chunk and create a comprehensive plan for data modules.
+                        
+                        {context_prompt}
+                        
+                        Return a JSON response with this structure:
+                        {{
+                            "planned_modules": [
+                                {{
+                                    "module_id": "unique_id_string",
+                                    "title": "Clear, descriptive title following S1000D naming conventions",
+                                    "description": "Detailed description of what this module should contain",
+                                    "type": "procedure|description|fault_isolation|theory_of_operation|maintenance_planning|support_equipment",
+                                    "info_code": "S1000D info code (040=description, 520=procedure, 730=fault_isolation, 710=theory, 320=maintenance_planning, 920=support_equipment)",
+                                    "item_location": "S1000D item location code (A, B, C, etc.)",
+                                    "estimated_content_sections": ["list of expected content sections"],
+                                    "priority": "high|medium|low",
+                                    "chunk_source": {chunk_num}
+                                }}
+                            ],
+                            "document_summary": "Overall summary of what this document covers",
+                            "planning_confidence": 0.95,
+                            "content_analysis": "Analysis of what type of content this chunk contains"
+                        }}
+                        
+                        IMPORTANT S1000D PLANNING RULES:
+                        1. Create logical, coherent modules that make sense as standalone units
+                        2. Don't create too many small modules - combine related content
+                        3. Procedures should be complete workflows, not fragments
+                        4. Descriptions should cover complete systems or components
+                        5. Consider the operational context: {existing_plan.get("operational_context", "Unknown")}
+                        6. Each module should have clear, actionable content
+                        7. Avoid duplicate or overlapping modules
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Analyze this text chunk for S1000D data module planning:\n\n{chunk}"
+                    }
+                ]
+            )
+            
+            # Parse response
+            raw_response = response.choices[0].message.content
+            cleaned_response = self._clean_json_response(raw_response)
+            result = json.loads(cleaned_response)
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error in planning analysis: {e}")
+            return {
+                "planned_modules": [],
+                "document_summary": f"Error analyzing chunk {chunk_num}",
+                "planning_confidence": 0.0,
+                "content_analysis": f"Error: {str(e)}"
+            }
+    
+    async def _merge_chunk_plan(self, existing_plan: Dict[str, Any], chunk_plan: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge planning data from multiple chunks"""
+        
+        # Merge document summary
+        if chunk_plan.get("document_summary"):
+            existing_plan["document_summary"] = (
+                existing_plan["document_summary"] + " " + chunk_plan["document_summary"]
+            ).strip()
+        
+        # Merge modules intelligently
+        new_modules = chunk_plan.get("planned_modules", [])
+        existing_modules = existing_plan.get("planned_modules", [])
+        
+        for new_module in new_modules:
+            # Check if this module is similar to an existing one
+            merged = False
+            for existing_module in existing_modules:
+                if self._should_merge_modules(existing_module, new_module):
+                    # Merge the modules
+                    existing_module["description"] = (
+                        existing_module["description"] + " " + new_module["description"]
+                    ).strip()
+                    existing_module["estimated_content_sections"] = list(set(
+                        existing_module.get("estimated_content_sections", []) + 
+                        new_module.get("estimated_content_sections", [])
+                    ))
+                    merged = True
+                    break
+            
+            if not merged:
+                # Add as new module
+                existing_modules.append(new_module)
+        
+        existing_plan["planned_modules"] = existing_modules
+        
+        # Update confidence (average of all chunks processed)
+        chunk_confidence = chunk_plan.get("planning_confidence", 0.0)
+        existing_confidence = existing_plan.get("planning_confidence", 0.0)
+        existing_plan["planning_confidence"] = (existing_confidence + chunk_confidence) / 2
+        
+        return existing_plan
+    
+    def _should_merge_modules(self, existing_module: Dict[str, Any], new_module: Dict[str, Any]) -> bool:
+        """Determine if two modules should be merged"""
+        # Check if titles are similar
+        existing_title = existing_module.get("title", "").lower()
+        new_title = new_module.get("title", "").lower()
+        
+        # Simple similarity check
+        if existing_title in new_title or new_title in existing_title:
+            return True
+        
+        # Check if same type and location
+        if (existing_module.get("type") == new_module.get("type") and
+            existing_module.get("item_location") == new_module.get("item_location")):
+            return True
+        
+        return False
+    
+    def _clean_json_response(self, response: str) -> str:
+        """Clean JSON response from AI"""
+        cleaned = response.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        return cleaned.strip()
+
 def chunk_text(text: str) -> List[str]:
     """Legacy function maintained for backward compatibility"""
     chunker = ChunkingStrategy()
