@@ -43,7 +43,6 @@ class AquilaApp {
     }
 
     initializeMainApp() {
-        this.setupEventListeners();
         this.setupWebSocket();
         this.loadDocuments();
         this.startPeriodicRefresh();
