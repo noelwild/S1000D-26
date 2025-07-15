@@ -254,10 +254,10 @@ class AquilaApp {
             const response = await fetch('/api/projects');
             if (response.ok) {
                 this.projects = await response.json();
-                console.log('Projects loaded:', this.projects);
+                console.log('Projects loaded:', this.projects.length, 'projects');
                 this.updateProjectsList();
             } else {
-                console.error('Failed to load projects:', response.status);
+                console.error('Failed to load projects:', response.status, response.statusText);
             }
         } catch (error) {
             console.error('Error loading projects:', error);
