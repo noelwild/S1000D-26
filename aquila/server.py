@@ -1543,7 +1543,175 @@ async def health_check():
         "current_project": current_project["name"] if current_project else None
     }
 
-@app.post("/api/documents/upload")
+@app.post("/api/documents/plan")
+async def plan_document_modules(doc_id: str) -> Dict[str, Any]:
+    """Generate planning JSON for document using large chunks"""
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    with Session(engine) as session:
+        # Get document
+        document = session.get(Document, doc_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        # Check if plan already exists
+        existing_plan = session.exec(
+            select(DocumentPlan).where(DocumentPlan.document_id == doc_id)
+        ).first()
+        
+        if existing_plan:
+            return {
+                "status": "already_planned",
+                "plan_id": existing_plan.id,
+                "plan_data": json.loads(existing_plan.plan_data)
+            }
+        
+        # Extract and clean text
+        text_cleaner = TextCleaner()
+        raw_text = extract_text(document.file_path, laparams=LAParams())
+        cleaning_result = text_cleaner.clean_extracted_text(raw_text)
+        clean_text = cleaning_result["clean_text"]
+        
+        # Create planning
+        planner = DocumentPlanner()
+        planning_data = await planner.analyze_and_plan(clean_text, document.operational_context)
+        
+        # Save planning data
+        plan_record = DocumentPlan(
+            document_id=doc_id,
+            plan_data=json.dumps(planning_data),
+            planning_confidence=planning_data.get("planning_confidence", 0.0),
+            total_chunks_analyzed=planning_data.get("total_planning_chunks", 0),
+            status="planned"
+        )
+        session.add(plan_record)
+        session.commit()
+        
+        return {
+            "status": "planned",
+            "plan_id": plan_record.id,
+            "plan_data": planning_data
+        }
+
+@app.post("/api/documents/populate")
+async def populate_planned_modules(doc_id: str) -> Dict[str, Any]:
+    """Populate planned modules with content using small chunks"""
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    with Session(engine) as session:
+        # Get document and plan
+        document = session.get(Document, doc_id)
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        plan = session.exec(
+            select(DocumentPlan).where(DocumentPlan.document_id == doc_id)
+        ).first()
+        
+        if not plan:
+            raise HTTPException(status_code=404, detail="No plan found. Please create a plan first.")
+        
+        # Get clean text
+        text_cleaner = TextCleaner()
+        raw_text = extract_text(document.file_path, laparams=LAParams())
+        cleaning_result = text_cleaner.clean_extracted_text(raw_text)
+        clean_text = cleaning_result["clean_text"]
+        
+        # Load plan data
+        planning_data = json.loads(plan.plan_data)
+        planned_modules = planning_data.get("planned_modules", [])
+        
+        # Populate each module
+        populator = ContentPopulator()
+        populated_modules = []
+        
+        for i, planned_module in enumerate(planned_modules):
+            # Send progress update
+            await manager.broadcast({
+                "type": "progress",
+                "phase": "population",
+                "doc_id": doc_id,
+                "detail": f"Populating module {i+1} of {len(planned_modules)}: {planned_module.get('title', 'Unknown')}",
+                "processing_type": "Module Population",
+                "current_text": f"Analyzing content for: {planned_module.get('title', 'Unknown')}",
+                "progress_section": f"{i+1}/{len(planned_modules)}"
+            })
+            
+            populated_module = await populator.populate_module(
+                planned_module, clean_text, document.operational_context
+            )
+            
+            # Save to database
+            data_module = DataModule(
+                document_id=doc_id,
+                plan_id=plan.id,
+                module_id=populated_module.get("module_id", f"module_{i+1}"),
+                dmc=populated_module.get("dmc", ""),
+                title=populated_module.get("title", ""),
+                info_code=populated_module.get("info_code", "040"),
+                item_location=populated_module.get("item_location", "A"),
+                sequence=i + 1,
+                verbatim_content=populated_module.get("verbatim_content", ""),
+                ste_content=populated_module.get("ste_content", ""),
+                type=populated_module.get("type", "description"),
+                prerequisites=populated_module.get("prerequisites", ""),
+                tools_equipment=populated_module.get("tools_equipment", ""),
+                warnings=populated_module.get("warnings", ""),
+                cautions=populated_module.get("cautions", ""),
+                procedural_steps=populated_module.get("procedural_steps", "[]"),
+                expected_results=populated_module.get("expected_results", ""),
+                specifications=populated_module.get("specifications", ""),
+                references=populated_module.get("references", ""),
+                content_sources=json.dumps(populated_module.get("content_sources", [])),
+                completeness_score=populated_module.get("completeness_score", 0.0),
+                relevant_chunks_found=populated_module.get("relevant_chunks_found", 0),
+                total_chunks_analyzed=populated_module.get("total_chunks_analyzed", 0),
+                population_status=populated_module.get("status", "complete")
+            )
+            
+            session.add(data_module)
+            populated_modules.append(populated_module)
+        
+        # Update plan status
+        plan.status = "completed"
+        session.commit()
+        
+        return {
+            "status": "populated",
+            "modules_created": len(populated_modules),
+            "populated_modules": populated_modules
+        }
+
+@app.get("/api/documents/{doc_id}/plan")
+async def get_document_plan(doc_id: str) -> Dict[str, Any]:
+    """Get planning information for document"""
+    engine = project_manager.get_current_engine()
+    if not engine:
+        raise HTTPException(status_code=400, detail="No project selected")
+    
+    with Session(engine) as session:
+        plan = session.exec(
+            select(DocumentPlan).where(DocumentPlan.document_id == doc_id)
+        ).first()
+        
+        if not plan:
+            raise HTTPException(status_code=404, detail="No plan found")
+        
+        return {
+            "plan_id": plan.id,
+            "document_id": plan.document_id,
+            "plan_data": json.loads(plan.plan_data),
+            "planning_confidence": plan.planning_confidence,
+            "total_chunks_analyzed": plan.total_chunks_analyzed,
+            "status": plan.status,
+            "created_at": plan.created_at
+        }
+
+@app.post("/api/documents/upload", response_model=Dict[str, Any])
 async def upload_document(file: UploadFile = File(...), operational_context: str = "Water"):
     """Upload and process a PDF document"""
     # Check if project is selected
