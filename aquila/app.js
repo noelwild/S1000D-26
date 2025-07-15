@@ -63,8 +63,19 @@ class AquilaApp {
         document.getElementById('verbatimBtn').addEventListener('click', () => this.switchToVerbatim());
         
         // Document selection
-        document.getElementById('documentSelect').addEventListener('change', (e) => {
+        document.getElementById('documentSelect').addEventListener('change', async (e) => {
             this.currentDocument = e.target.value;
+            
+            // Load document plan if available
+            if (this.currentDocument) {
+                const plan = await this.loadDocumentPlan(this.currentDocument);
+                if (plan) {
+                    this.displayPlanPreview(plan);
+                } else {
+                    document.getElementById('planPreview').innerHTML = '';
+                }
+            }
+            
             this.loadDataModules();
         });
         
