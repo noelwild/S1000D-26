@@ -1650,32 +1650,32 @@ async def populate_planned_modules(doc_id: str) -> Dict[str, Any]:
                 planned_module, clean_text, document.operational_context
             )
             
-            # Save to database
+            # Save to database - ensure all data is properly converted for SQLite
             data_module = DataModule(
                 document_id=doc_id,
                 plan_id=plan.id,
-                module_id=populated_module.get("module_id", f"module_{i+1}"),
-                dmc=populated_module.get("dmc", ""),
-                title=populated_module.get("title", ""),
-                info_code=populated_module.get("info_code", "040"),
-                item_location=populated_module.get("item_location", "A"),
+                module_id=str(populated_module.get("module_id", f"module_{i+1}")),
+                dmc=str(populated_module.get("dmc", "")),
+                title=str(populated_module.get("title", "")),
+                info_code=str(populated_module.get("info_code", "040")),
+                item_location=str(populated_module.get("item_location", "A")),
                 sequence=i + 1,
-                verbatim_content=populated_module.get("verbatim_content", ""),
-                ste_content=populated_module.get("ste_content", ""),
-                type=populated_module.get("type", "description"),
-                prerequisites=populated_module.get("prerequisites", ""),
-                tools_equipment=populated_module.get("tools_equipment", ""),
-                warnings=populated_module.get("warnings", ""),
-                cautions=populated_module.get("cautions", ""),
-                procedural_steps=populated_module.get("procedural_steps", "[]"),
-                expected_results=populated_module.get("expected_results", ""),
-                specifications=populated_module.get("specifications", ""),
-                references=populated_module.get("references", ""),
-                content_sources=json.dumps(populated_module.get("content_sources", [])),
-                completeness_score=populated_module.get("completeness_score", 0.0),
-                relevant_chunks_found=populated_module.get("relevant_chunks_found", 0),
-                total_chunks_analyzed=populated_module.get("total_chunks_analyzed", 0),
-                population_status=populated_module.get("status", "complete")
+                verbatim_content=str(populated_module.get("verbatim_content", "")),
+                ste_content=str(populated_module.get("ste_content", "")),
+                type=str(populated_module.get("type", "description")),
+                prerequisites=str(populated_module.get("prerequisites", "")),
+                tools_equipment=str(populated_module.get("tools_equipment", "")),
+                warnings=str(populated_module.get("warnings", "")),
+                cautions=str(populated_module.get("cautions", "")),
+                procedural_steps=json.dumps(populated_module.get("procedural_steps", [])) if isinstance(populated_module.get("procedural_steps"), list) else str(populated_module.get("procedural_steps", "[]")),
+                expected_results=str(populated_module.get("expected_results", "")),
+                specifications=str(populated_module.get("specifications", "")),
+                references=str(populated_module.get("references", "")),
+                content_sources=json.dumps(populated_module.get("content_sources", [])) if isinstance(populated_module.get("content_sources"), list) else str(populated_module.get("content_sources", "[]")),
+                completeness_score=float(populated_module.get("completeness_score", 0.0)),
+                relevant_chunks_found=int(populated_module.get("relevant_chunks_found", 0)),
+                total_chunks_analyzed=int(populated_module.get("total_chunks_analyzed", 0)),
+                population_status=str(populated_module.get("status", "complete"))
             )
             
             session.add(data_module)
