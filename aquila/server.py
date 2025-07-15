@@ -53,6 +53,9 @@ class ProjectManager:
         self.current_engine = None
         self.ensure_projects_directory()
         
+        # Load current project from config on startup
+        self.load_current_project_from_config()
+        
     def ensure_projects_directory(self):
         """Ensure projects directory exists"""
         self.projects_dir.mkdir(exist_ok=True)
