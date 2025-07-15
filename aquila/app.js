@@ -70,7 +70,7 @@ class AquilaApp {
 
     handleProgressUpdate(data) {
         if (data.type === 'progress') {
-            this.showProgress(data.phase, data.detail);
+            this.showProgress(data.phase, data.detail, data.processing_type, data.current_text, data.progress_section);
             
             // Update progress bar based on phase
             const progressPercent = this.getProgressPercent(data.phase);
@@ -81,30 +81,62 @@ class AquilaApp {
                 setTimeout(() => {
                     this.hideProgress();
                     this.loadDocuments();
-                }, 2000);
+                }, 3000);
             }
         }
     }
 
     getProgressPercent(phase) {
         const phases = {
-            'upload_complete': 20,
-            'text_extracted': 40,
+            'upload_complete': 10,
+            'text_extraction': 15,
+            'text_extracted': 20,
+            'classification': 35,
+            'ste_conversion': 50,
+            'module_creation': 60,
             'modules_created': 70,
-            'images_processing': 85,
+            'images_processing': 80,
+            'image_analysis': 90,
             'finished': 100
         };
         return phases[phase] || 0;
     }
 
-    showProgress(phase, detail) {
+    showProgress(phase, detail, processingType, currentText, progressSection) {
         const container = document.getElementById('progressContainer');
         const phaseElement = document.getElementById('progressPhase');
         const detailElement = document.getElementById('progressDetail');
+        const processingTypeElement = document.getElementById('processingType');
+        const currentTextElement = document.getElementById('currentText');
+        const progressSectionElement = document.getElementById('progressSection');
         
         container.classList.remove('hidden');
         phaseElement.textContent = this.formatPhase(phase);
         detailElement.textContent = detail;
+        
+        // Update processing type
+        if (processingType) {
+            processingTypeElement.textContent = processingType;
+            processingTypeElement.classList.remove('hidden');
+        } else {
+            processingTypeElement.classList.add('hidden');
+        }
+        
+        // Update current text being processed
+        if (currentText) {
+            currentTextElement.textContent = currentText;
+            currentTextElement.classList.remove('hidden');
+        } else {
+            currentTextElement.classList.add('hidden');
+        }
+        
+        // Update progress section
+        if (progressSection) {
+            progressSectionElement.textContent = `Section ${progressSection}`;
+            progressSectionElement.classList.remove('hidden');
+        } else {
+            progressSectionElement.classList.add('hidden');
+        }
     }
 
     hideProgress() {
