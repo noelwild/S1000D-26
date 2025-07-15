@@ -31,7 +31,15 @@
       "created_at": "2025-07-15T03:21:34.097554",
       "database_path": "projects/ff90df7d-37ac-4085-b0f4-7fe1529f18ba/aquila.db",
       "uploads_path": "projects/ff90df7d-37ac-4085-b0f4-7fe1529f18ba/uploads"
+    },
+    {
+      "id": "bb93babb-eb82-4093-b81b-eed4799b9c96",
+      "name": "Test Project Fix",
+      "description": "This is a test project created after fixing the Create New Project button issue.",
+      "created_at": "2025-07-15T03:39:44.036725",
+      "database_path": "projects/bb93babb-eb82-4093-b81b-eed4799b9c96/aquila.db",
+      "uploads_path": "projects/bb93babb-eb82-4093-b81b-eed4799b9c96/uploads"
     }
   ],
-  "current_project": "ff90df7d-37ac-4085-b0f4-7fe1529f18ba"
+  "current_project": "bb93babb-eb82-4093-b81b-eed4799b9c96"
 }
