@@ -199,7 +199,17 @@ STE RULES:
             ]
         )
         
-        result = json.loads(response.choices[0].message.content)
+        # Debug: Print the raw response
+        raw_response = response.choices[0].message.content
+        print(f"DEBUG: Raw OpenAI response: {raw_response}")
+        
+        # Check if response is empty or None
+        if not raw_response or raw_response.strip() == "":
+            print("DEBUG: Empty response from OpenAI")
+            raise ValueError("Empty response from OpenAI")
+        
+        # Try to parse JSON
+        result = json.loads(raw_response)
         
         # Validate required fields and set defaults
         required_fields = ["type", "title", "info_code", "item_location", "ste", "should_start_new_module"]
@@ -224,6 +234,26 @@ STE RULES:
             
         return result
         
+    except json.JSONDecodeError as e:
+        print(f"DEBUG: JSON decode error: {e}")
+        print(f"DEBUG: Raw response that failed to parse: {raw_response if 'raw_response' in locals() else 'No response captured'}")
+        # Enhanced fallback response
+        return {
+            "type": "description",
+            "title": "Content Section",
+            "info_code": "040",
+            "item_location": "A",
+            "ste": text,
+            "should_start_new_module": True,
+            "prerequisites": "",
+            "tools_equipment": "",
+            "warnings": "",
+            "cautions": "",
+            "procedural_steps": json.dumps([]),
+            "expected_results": "",
+            "specifications": "",
+            "references": ""
+        }
     except Exception as e:
         print(f"OpenAI classify_extract error: {e}")
         # Enhanced fallback response
