@@ -221,6 +221,7 @@ class AquilaApp {
 
     // Project Management Methods
     async showProjectSelection() {
+        console.log('Showing project selection modal...');
         await this.loadProjects();
         this.hideMainInterface();
         document.getElementById('projectSelectionModal').classList.remove('hidden');
