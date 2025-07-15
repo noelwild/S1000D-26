@@ -288,7 +288,7 @@ async def comprehensive_test():
                     tools_equipment=populated.get("tools_equipment", ""),
                     warnings=populated.get("warnings", ""),
                     cautions=populated.get("cautions", ""),
-                    procedural_steps=populated.get("procedural_steps", "[]"),
+                    procedural_steps=json.dumps(populated.get("procedural_steps", [])),
                     expected_results=populated.get("expected_results", ""),
                     specifications=populated.get("specifications", ""),
                     references=populated.get("references", ""),
