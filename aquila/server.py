@@ -520,9 +520,11 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
         # Extract text
         await manager.broadcast({
             "type": "progress",
-            "phase": "text_extracted",
+            "phase": "text_extraction",
             "doc_id": doc_id,
-            "detail": "Extracting text from PDF..."
+            "detail": "Extracting text from PDF...",
+            "processing_type": "Text Extraction",
+            "current_text": "Reading PDF file structure..."
         })
         
         text = extract_text(file_path, laparams=LAParams())
@@ -531,18 +533,45 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
         # Process chunks and create data modules
         await manager.broadcast({
             "type": "progress",
-            "phase": "modules_created",
+            "phase": "text_extracted",
             "doc_id": doc_id,
-            "detail": f"Processing {len(chunks)} logical sections..."
+            "detail": f"Processing {len(chunks)} logical sections...",
+            "processing_type": "Document Analysis",
+            "current_text": f"Divided document into {len(chunks)} logical sections for analysis"
         })
         
         with Session(engine) as session:
             sequence = 1
             current_module = None
             
-            for chunk in chunks:
+            for i, chunk in enumerate(chunks):
+                # Truncate text for display (first 150 characters)
+                truncated_text = chunk[:150] + "..." if len(chunk) > 150 else chunk
+                
+                # Send progress update for classification
+                await manager.broadcast({
+                    "type": "progress",
+                    "phase": "classification",
+                    "doc_id": doc_id,
+                    "detail": f"Classifying section {i+1} of {len(chunks)}",
+                    "processing_type": "AI Classification",
+                    "current_text": truncated_text,
+                    "progress_section": f"{i+1}/{len(chunks)}"
+                })
+                
                 # Classify and extract structured content
                 result = await classify_extract(chunk)
+                
+                # Send progress update for STE conversion
+                await manager.broadcast({
+                    "type": "progress",
+                    "phase": "ste_conversion",
+                    "doc_id": doc_id,
+                    "detail": f"Converting section {i+1} to Simplified Technical English",
+                    "processing_type": "STE Conversion",
+                    "current_text": result.get("ste", "")[:150] + "..." if len(result.get("ste", "")) > 150 else result.get("ste", ""),
+                    "progress_section": f"{i+1}/{len(chunks)}"
+                })
                 
                 if result.get("should_start_new_module", True) or current_module is None:
                     # Create new data module with all S1000D fields
