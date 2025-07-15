@@ -622,5 +622,5 @@ class AquilaApp {
 
 // Initialize the application when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new AquilaApp();
+    window.app = new AquilaApp();
 });
