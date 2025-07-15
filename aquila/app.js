@@ -1,22 +1,50 @@
-// Aquila S1000D-AI Frontend Application
+// Aquila S1000D-AI Frontend Application with Project Management
 class AquilaApp {
     constructor() {
         this.currentDocument = null;
         this.currentModule = null;
+        this.currentProject = null;
         this.isSTEView = true;
         this.documents = [];
         this.modules = [];
         this.icns = [];
         this.ws = null;
+        this.projects = [];
         
         this.initializeApp();
     }
 
-    initializeApp() {
+    async initializeApp() {
+        // First check if we have a current project
+        await this.checkCurrentProject();
+        
+        // If no project is selected, show project selection
+        if (!this.currentProject) {
+            this.showProjectSelection();
+        } else {
+            this.initializeMainApp();
+        }
+    }
+
+    async checkCurrentProject() {
+        try {
+            const response = await fetch('/api/projects/current');
+            if (response.ok) {
+                const result = await response.json();
+                this.currentProject = result.current_project;
+                this.updateProjectDisplay();
+            }
+        } catch (error) {
+            console.error('Error checking current project:', error);
+        }
+    }
+
+    initializeMainApp() {
         this.setupEventListeners();
         this.setupWebSocket();
         this.loadDocuments();
         this.startPeriodicRefresh();
+        this.showMainInterface();
     }
 
     setupEventListeners() {
@@ -45,6 +73,13 @@ class AquilaApp {
                 document.getElementById('confirmUpload').disabled = false;
             }
         });
+
+        // Project management
+        document.getElementById('projectBtn').addEventListener('click', () => this.showProjectSelection());
+        document.getElementById('newProjectBtn').addEventListener('click', () => this.showNewProjectModal());
+        document.getElementById('cancelNewProject').addEventListener('click', () => this.hideNewProjectModal());
+        document.getElementById('confirmNewProject').addEventListener('click', () => this.handleCreateProject());
+        document.getElementById('cancelProjectSelection').addEventListener('click', () => this.hideProjectSelection());
     }
 
     setupWebSocket() {
@@ -159,7 +194,203 @@ class AquilaApp {
         return phases[phase] || 'Processing';
     }
 
+    // Project Management Methods
+    async showProjectSelection() {
+        await this.loadProjects();
+        this.hideMainInterface();
+        document.getElementById('projectSelectionModal').classList.remove('hidden');
+        document.getElementById('projectSelectionModal').classList.add('flex');
+    }
+
+    hideProjectSelection() {
+        document.getElementById('projectSelectionModal').classList.add('hidden');
+        document.getElementById('projectSelectionModal').classList.remove('flex');
+        if (this.currentProject) {
+            this.showMainInterface();
+        }
+    }
+
+    showNewProjectModal() {
+        document.getElementById('newProjectModal').classList.remove('hidden');
+        document.getElementById('newProjectModal').classList.add('flex');
+        document.getElementById('projectName').value = '';
+        document.getElementById('projectDescription').value = '';
+    }
+
+    hideNewProjectModal() {
+        document.getElementById('newProjectModal').classList.add('hidden');
+        document.getElementById('newProjectModal').classList.remove('flex');
+    }
+
+    async loadProjects() {
+        try {
+            const response = await fetch('/api/projects');
+            if (response.ok) {
+                this.projects = await response.json();
+                this.updateProjectsList();
+            }
+        } catch (error) {
+            console.error('Error loading projects:', error);
+        }
+    }
+
+    updateProjectsList() {
+        const container = document.getElementById('projectsList');
+        
+        if (this.projects.length === 0) {
+            container.innerHTML = `
+                <div class="text-gray-400 text-center py-8">
+                    <div class="text-4xl mb-4">📁</div>
+                    <p>No projects found</p>
+                    <p class="text-sm mt-2">Create your first project to get started</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = '';
+        
+        this.projects.forEach(project => {
+            const projectElement = document.createElement('div');
+            projectElement.className = 'bg-gray-700 p-4 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors';
+            projectElement.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white">${project.name}</h3>
+                        <p class="text-gray-300 text-sm">${project.description || 'No description'}</p>
+                        <p class="text-gray-400 text-xs mt-1">Created: ${new Date(project.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button class="select-project-btn bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm transition-colors">
+                            Select
+                        </button>
+                        <button class="delete-project-btn bg-red-600 hover:bg-red-700 px-3 py-1 rounded text-sm transition-colors">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            const selectBtn = projectElement.querySelector('.select-project-btn');
+            const deleteBtn = projectElement.querySelector('.delete-project-btn');
+            
+            selectBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.selectProject(project.id);
+            });
+            
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteProject(project.id, project.name);
+            });
+            
+            container.appendChild(projectElement);
+        });
+    }
+
+    async handleCreateProject() {
+        const name = document.getElementById('projectName').value.trim();
+        const description = document.getElementById('projectDescription').value.trim();
+        
+        if (!name) {
+            alert('Please enter a project name');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/projects', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `name=${encodeURIComponent(name)}&description=${encodeURIComponent(description)}`
+            });
+            
+            if (response.ok) {
+                const project = await response.json();
+                this.hideNewProjectModal();
+                await this.loadProjects();
+                // Auto-select the new project
+                await this.selectProject(project.id);
+            } else {
+                const error = await response.json();
+                alert(`Failed to create project: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Error creating project:', error);
+            alert('Failed to create project. Please try again.');
+        }
+    }
+
+    async selectProject(projectId) {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/select`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                await this.checkCurrentProject();
+                this.hideProjectSelection();
+                this.initializeMainApp();
+            } else {
+                const error = await response.json();
+                alert(`Failed to select project: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Error selecting project:', error);
+            alert('Failed to select project. Please try again.');
+        }
+    }
+
+    async deleteProject(projectId, projectName) {
+        if (!confirm(`Are you sure you want to delete project "${projectName}"? This action cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/projects/${projectId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                await this.loadProjects();
+                // If we deleted the current project, reset current project
+                if (this.currentProject && this.currentProject.id === projectId) {
+                    this.currentProject = null;
+                    this.updateProjectDisplay();
+                }
+            } else {
+                const error = await response.json();
+                alert(`Failed to delete project: ${error.detail}`);
+            }
+        } catch (error) {
+            console.error('Error deleting project:', error);
+            alert('Failed to delete project. Please try again.');
+        }
+    }
+
+    updateProjectDisplay() {
+        const projectNameElement = document.getElementById('currentProjectName');
+        if (this.currentProject) {
+            projectNameElement.textContent = this.currentProject.name;
+        } else {
+            projectNameElement.textContent = 'No Project Selected';
+        }
+    }
+
+    showMainInterface() {
+        document.getElementById('mainInterface').classList.remove('hidden');
+    }
+
+    hideMainInterface() {
+        document.getElementById('mainInterface').classList.add('hidden');
+    }
+
     showUploadModal() {
+        if (!this.currentProject) {
+            alert('Please select a project first');
+            return;
+        }
         document.getElementById('uploadModal').classList.remove('hidden');
         document.getElementById('uploadModal').classList.add('flex');
     }
@@ -178,6 +409,11 @@ class AquilaApp {
         
         if (!file) {
             alert('Please select a PDF file');
+            return;
+        }
+        
+        if (!this.currentProject) {
+            alert('Please select a project first');
             return;
         }
         
@@ -209,6 +445,10 @@ class AquilaApp {
     }
 
     async loadDocuments() {
+        if (!this.currentProject) {
+            return;
+        }
+        
         try {
             const response = await fetch('/api/documents');
             if (response.ok) {
@@ -233,7 +473,7 @@ class AquilaApp {
     }
 
     async loadDataModules() {
-        if (!this.currentDocument) {
+        if (!this.currentDocument || !this.currentProject) {
             this.updateModulesList([]);
             return;
         }
@@ -365,9 +605,11 @@ class AquilaApp {
     startPeriodicRefresh() {
         // Refresh documents every 10 seconds
         setInterval(() => {
-            this.loadDocuments();
-            if (this.currentDocument) {
-                this.loadDataModules();
+            if (this.currentProject) {
+                this.loadDocuments();
+                if (this.currentDocument) {
+                    this.loadDataModules();
+                }
             }
         }, 10000);
     }
