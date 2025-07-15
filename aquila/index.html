@@ -79,18 +79,39 @@
 
             <!-- Progress Bar -->
             <div id="progressContainer" class="bg-gray-800 border-b border-gray-700 p-4 hidden">
-                <div class="flex items-center space-x-4">
-                    <div class="flex-1">
-                        <div class="flex justify-between text-sm text-gray-400 mb-1">
-                            <span id="progressPhase">Processing...</span>
-                            <span id="progressPercent">0%</span>
+                <div class="space-y-3">
+                    <!-- Main Progress Bar -->
+                    <div class="flex items-center space-x-4">
+                        <div class="flex-1">
+                            <div class="flex justify-between text-sm text-gray-400 mb-1">
+                                <span id="progressPhase">Processing...</span>
+                                <span id="progressPercent">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-2">
+                                <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
                         </div>
-                        <div class="w-full bg-gray-700 rounded-full h-2">
-                            <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                        <div class="text-sm text-gray-400" id="progressDetail">
+                            <!-- Progress details -->
                         </div>
                     </div>
-                    <div class="text-sm text-gray-400" id="progressDetail">
-                        <!-- Progress details -->
+                    
+                    <!-- Detailed Progress Information -->
+                    <div class="bg-gray-700 rounded-lg p-3 space-y-2">
+                        <!-- Processing Type -->
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs font-medium text-blue-400">Processing Type:</span>
+                            <span id="processingType" class="text-sm text-gray-300"></span>
+                            <span id="progressSection" class="text-xs text-gray-400 ml-auto"></span>
+                        </div>
+                        
+                        <!-- Current Text Preview -->
+                        <div class="bg-gray-800 rounded p-2">
+                            <div class="text-xs font-medium text-gray-400 mb-1">Current Content:</div>
+                            <div id="currentText" class="text-sm text-gray-300 italic max-h-16 overflow-y-auto leading-relaxed">
+                                <!-- Current text being processed -->
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
