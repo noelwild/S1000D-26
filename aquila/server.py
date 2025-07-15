@@ -1799,6 +1799,258 @@ def find_best_module_for_image(session: Session, doc_id: str, caption: str) -> O
     # If no good match found, return first module
     return best_module or modules[0]
 
+async def process_document_enhanced(doc_id: str, file_path: str, operational_context: str):
+    """Enhanced document processing with two-phase approach"""
+    engine = project_manager.get_current_engine()
+    
+    try:
+        # Phase 1: Upload Complete
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "upload_complete",
+            "doc_id": doc_id,
+            "detail": "Document uploaded successfully",
+            "processing_type": "Upload Complete",
+            "current_text": "Starting enhanced processing..."
+        })
+        
+        # Phase 2: Text Extraction and Cleaning
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "text_extraction",
+            "doc_id": doc_id,
+            "detail": "Extracting and cleaning text from PDF...",
+            "processing_type": "Text Extraction",
+            "current_text": "Removing headers, footers, and page numbers..."
+        })
+        
+        # Extract and clean text
+        text_cleaner = TextCleaner()
+        raw_text = extract_text(file_path, laparams=LAParams())
+        cleaning_result = text_cleaner.clean_extracted_text(raw_text)
+        clean_text = cleaning_result["clean_text"]
+        
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "text_extracted",
+            "doc_id": doc_id,
+            "detail": f"Text cleaned successfully. {cleaning_result['cleaning_report']}",
+            "processing_type": "Text Cleaning Complete",
+            "current_text": f"Removed: {len(cleaning_result['removed_elements'])} non-content elements"
+        })
+        
+        # Phase 3: Document Planning
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "planning",
+            "doc_id": doc_id,
+            "detail": "Analyzing document structure for optimal data modules...",
+            "processing_type": "Document Planning",
+            "current_text": "AI is analyzing content to plan data modules..."
+        })
+        
+        planner = DocumentPlanner()
+        planning_data = await planner.analyze_and_plan(clean_text, operational_context)
+        
+        # Save planning data
+        with Session(engine) as session:
+            plan_record = DocumentPlan(
+                document_id=doc_id,
+                plan_data=json.dumps(planning_data),
+                planning_confidence=planning_data.get("planning_confidence", 0.0),
+                total_chunks_analyzed=planning_data.get("total_planning_chunks", 0),
+                status="planned"
+            )
+            session.add(plan_record)
+            session.commit()
+            plan_id = plan_record.id
+        
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "planning_complete",
+            "doc_id": doc_id,
+            "detail": f"Planning complete. {len(planning_data.get('planned_modules', []))} modules planned",
+            "processing_type": "Planning Complete",
+            "current_text": f"Confidence: {planning_data.get('planning_confidence', 0.0):.2f}, Modules: {len(planning_data.get('planned_modules', []))}"
+        })
+        
+        # Phase 4: Module Population
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "population",
+            "doc_id": doc_id,
+            "detail": "Populating planned modules with content...",
+            "processing_type": "Module Population",
+            "current_text": "AI is reading through text to populate each module..."
+        })
+        
+        planned_modules = planning_data.get("planned_modules", [])
+        populator = ContentPopulator()
+        populated_modules = []
+        
+        with Session(engine) as session:
+            for i, planned_module in enumerate(planned_modules):
+                # Send progress update
+                await manager.broadcast({
+                    "type": "progress",
+                    "phase": "population",
+                    "doc_id": doc_id,
+                    "detail": f"Populating module {i+1} of {len(planned_modules)}: {planned_module.get('title', 'Unknown')}",
+                    "processing_type": "Module Population",
+                    "current_text": f"Analyzing content for: {planned_module.get('title', 'Unknown')}",
+                    "progress_section": f"{i+1}/{len(planned_modules)}"
+                })
+                
+                populated_module = await populator.populate_module(
+                    planned_module, clean_text, operational_context
+                )
+                
+                # Save to database
+                data_module = DataModule(
+                    document_id=doc_id,
+                    plan_id=plan_id,
+                    module_id=populated_module.get("module_id", f"module_{i+1}"),
+                    dmc=populated_module.get("dmc", ""),
+                    title=populated_module.get("title", ""),
+                    info_code=populated_module.get("info_code", "040"),
+                    item_location=populated_module.get("item_location", "A"),
+                    sequence=i + 1,
+                    verbatim_content=populated_module.get("verbatim_content", ""),
+                    ste_content=populated_module.get("ste_content", ""),
+                    type=populated_module.get("type", "description"),
+                    prerequisites=populated_module.get("prerequisites", ""),
+                    tools_equipment=populated_module.get("tools_equipment", ""),
+                    warnings=populated_module.get("warnings", ""),
+                    cautions=populated_module.get("cautions", ""),
+                    procedural_steps=populated_module.get("procedural_steps", "[]"),
+                    expected_results=populated_module.get("expected_results", ""),
+                    specifications=populated_module.get("specifications", ""),
+                    references=populated_module.get("references", ""),
+                    content_sources=json.dumps(populated_module.get("content_sources", [])),
+                    completeness_score=populated_module.get("completeness_score", 0.0),
+                    relevant_chunks_found=populated_module.get("relevant_chunks_found", 0),
+                    total_chunks_analyzed=populated_module.get("total_chunks_analyzed", 0),
+                    population_status=populated_module.get("status", "complete")
+                )
+                
+                session.add(data_module)
+                populated_modules.append(populated_module)
+            
+            # Update plan status
+            plan_record = session.get(DocumentPlan, plan_id)
+            if plan_record:
+                plan_record.status = "completed"
+            
+            session.commit()
+        
+        # Phase 5: Image Processing (keep existing functionality)
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "images_processing",
+            "doc_id": doc_id,
+            "detail": "Extracting images from PDF...",
+            "processing_type": "Image Extraction",
+            "current_text": "Scanning PDF for embedded images..."
+        })
+        
+        images = extract_images_from_pdf(file_path)
+        
+        if images:
+            await manager.broadcast({
+                "type": "progress",
+                "phase": "images_processing",
+                "doc_id": doc_id,
+                "detail": f"Found {len(images)} images, generating captions...",
+                "processing_type": "Image Analysis",
+                "current_text": f"Processing {len(images)} images with AI vision analysis"
+            })
+            
+            with Session(engine) as session:
+                for i, image_path in enumerate(images):
+                    try:
+                        # Generate ICN
+                        with open(image_path, 'rb') as img_file:
+                            image_hash = hashlib.sha256(img_file.read()).hexdigest()[:8]
+                        icn = f"ICN-{image_hash}"
+                        
+                        # Send progress update for image processing
+                        await manager.broadcast({
+                            "type": "progress",
+                            "phase": "image_analysis",
+                            "doc_id": doc_id,
+                            "detail": f"Analyzing image {i+1} of {len(images)}",
+                            "processing_type": "AI Vision Analysis",
+                            "current_text": f"Generating caption for image {icn}...",
+                            "progress_section": f"{i+1}/{len(images)}"
+                        })
+                        
+                        # Get caption and objects
+                        vision_result = await caption_objects(image_path)
+                        
+                        # Find most appropriate data module for this image
+                        data_module = find_best_module_for_image(session, doc_id, vision_result["caption"])
+                        
+                        if data_module:
+                            icn_record = ICN(
+                                document_id=doc_id,
+                                data_module_id=data_module.id,
+                                icn=icn,
+                                image_path=image_path,
+                                caption=vision_result["caption"],
+                                objects=json.dumps(vision_result["objects"])
+                            )
+                            session.add(icn_record)
+                            
+                            await manager.broadcast({
+                                "type": "progress",
+                                "phase": "image_analysis",
+                                "doc_id": doc_id,
+                                "detail": f"Generated caption for image {i+1}",
+                                "processing_type": "Image Caption Generated",
+                                "current_text": vision_result["caption"][:150] + "..." if len(vision_result["caption"]) > 150 else vision_result["caption"],
+                                "progress_section": f"{i+1}/{len(images)}"
+                            })
+                            
+                    except Exception as e:
+                        print(f"Error processing image {image_path}: {e}")
+                        continue
+                
+                session.commit()
+        
+        # Update document status
+        with Session(engine) as session:
+            document = session.get(Document, doc_id)
+            if document:
+                document.status = "completed"
+                session.commit()
+        
+        await manager.broadcast({
+            "type": "progress",
+            "phase": "finished",
+            "doc_id": doc_id,
+            "detail": "Enhanced document processing completed successfully",
+            "processing_type": "Complete",
+            "current_text": f"Created {len(populated_modules)} data modules with enhanced AI planning and population"
+        })
+        
+    except Exception as e:
+        print(f"Error processing document {doc_id}: {e}")
+        
+        # Update document status to failed
+        with Session(engine) as session:
+            document = session.get(Document, doc_id)
+            if document:
+                document.status = "failed"
+                session.commit()
+        
+        await manager.broadcast({
+            "type": "error",
+            "doc_id": doc_id,
+            "detail": f"Enhanced document processing failed: {str(e)}",
+            "processing_type": "Error",
+            "current_text": f"Processing failed: {str(e)}"
+        })
+
 async def process_document(doc_id: str, file_path: str, operational_context: str):
     """Process the uploaded PDF document with improved S1000D compliance"""
     try:
