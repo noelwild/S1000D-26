@@ -15,16 +15,20 @@ class AquilaApp {
     }
 
     async initializeApp() {
+        console.log('Initializing app...');
         // Set up event listeners first, before checking current project
         this.setupEventListeners();
         
         // First check if we have a current project
         await this.checkCurrentProject();
+        console.log('Current project after check:', this.currentProject);
         
         // If no project is selected, show project selection
         if (!this.currentProject) {
+            console.log('No current project, showing project selection');
             this.showProjectSelection();
         } else {
+            console.log('Current project exists, initializing main app');
             this.initializeMainApp();
         }
     }
