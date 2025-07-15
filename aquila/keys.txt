@@ -1,4 +1,4 @@
 # Add your OpenAI API key here
 # Format: OPENAI_API_KEY=your_openai_api_key_here
 # Get your API key from: https://platform.openai.com/account/api-keys
-OPENAI_API_KEY=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
+OPENAI_API_KEY=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
