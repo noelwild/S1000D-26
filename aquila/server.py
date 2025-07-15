@@ -630,19 +630,19 @@ async def process_document(doc_id: str, file_path: str, operational_context: str
                     current_module.ste_content += "\n\n" + result["ste"]
                     
                     # Merge structured content intelligently
-                    if result.get("prerequisites"):
+                    if result.get("prerequisites") and isinstance(result["prerequisites"], str):
                         current_module.prerequisites += "\n" + result["prerequisites"]
-                    if result.get("tools_equipment"):
+                    if result.get("tools_equipment") and isinstance(result["tools_equipment"], str):
                         current_module.tools_equipment += "\n" + result["tools_equipment"]
-                    if result.get("warnings"):
+                    if result.get("warnings") and isinstance(result["warnings"], str):
                         current_module.warnings += "\n" + result["warnings"]
-                    if result.get("cautions"):
+                    if result.get("cautions") and isinstance(result["cautions"], str):
                         current_module.cautions += "\n" + result["cautions"]
-                    if result.get("expected_results"):
+                    if result.get("expected_results") and isinstance(result["expected_results"], str):
                         current_module.expected_results += "\n" + result["expected_results"]
-                    if result.get("specifications"):
+                    if result.get("specifications") and isinstance(result["specifications"], str):
                         current_module.specifications += "\n" + result["specifications"]
-                    if result.get("references"):
+                    if result.get("references") and isinstance(result["references"], str):
                         current_module.references += "\n" + result["references"]
                     
                     # Merge procedural steps
