@@ -985,6 +985,259 @@ class DocumentPlanner:
             cleaned = cleaned[:-3]
         return cleaned.strip()
 
+class ContentPopulator:
+    """AI-powered content population for planned modules"""
+    
+    def __init__(self):
+        self.client = openai.OpenAI(api_key=openai.api_key)
+        self.chunker = ChunkingStrategy()
+        
+    async def populate_module(self, planned_module: Dict[str, Any], clean_text: str, 
+                            operational_context: str) -> Dict[str, Any]:
+        """
+        Populate a specific module using small chunks (400 tokens/50 overlap):
+        - Searches all population chunks for relevant content
+        - Ensures completeness of information
+        - Maintains S1000D compliance
+        """
+        # Create population chunks
+        population_chunks = self.chunker.create_population_chunks(clean_text)
+        
+        # Collect all relevant content for this module
+        relevant_content = []
+        content_sources = []
+        
+        for i, chunk in enumerate(population_chunks):
+            relevance = await self._assess_chunk_relevance(chunk, planned_module)
+            
+            if relevance["is_relevant"]:
+                relevant_content.append({
+                    "chunk_index": i,
+                    "content": chunk,
+                    "relevance_score": relevance["relevance_score"],
+                    "relevant_sections": relevance["relevant_sections"]
+                })
+                content_sources.append(f"Chunk {i+1}")
+        
+        # Sort by relevance score
+        relevant_content.sort(key=lambda x: x["relevance_score"], reverse=True)
+        
+        # Populate the module with collected content
+        populated_module = await self._populate_module_content(
+            planned_module, relevant_content, operational_context
+        )
+        
+        populated_module["content_sources"] = content_sources
+        populated_module["total_chunks_analyzed"] = len(population_chunks)
+        populated_module["relevant_chunks_found"] = len(relevant_content)
+        
+        return populated_module
+    
+    async def _assess_chunk_relevance(self, chunk: str, planned_module: Dict[str, Any]) -> Dict[str, Any]:
+        """Assess how relevant a chunk is to a planned module"""
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": """You are an expert in S1000D technical documentation. 
+                        
+                        Assess how relevant the given text chunk is to the planned data module.
+                        
+                        Return a JSON response with this structure:
+                        {
+                            "is_relevant": true/false,
+                            "relevance_score": 0.0-1.0,
+                            "relevant_sections": ["list of specific sections that are relevant"],
+                            "reasoning": "explanation of why this chunk is or isn't relevant"
+                        }
+                        
+                        Be thorough but selective - only mark as relevant if the chunk contains 
+                        information that would actually belong in this specific module."""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""
+                        PLANNED MODULE:
+                        Title: {planned_module.get('title', '')}
+                        Description: {planned_module.get('description', '')}
+                        Type: {planned_module.get('type', '')}
+                        Expected sections: {planned_module.get('estimated_content_sections', [])}
+                        
+                        TEXT CHUNK TO ASSESS:
+                        {chunk}
+                        
+                        Is this chunk relevant to the planned module?
+                        """
+                    }
+                ]
+            )
+            
+            raw_response = response.choices[0].message.content
+            cleaned_response = self._clean_json_response(raw_response)
+            result = json.loads(cleaned_response)
+            
+            return result
+            
+        except Exception as e:
+            print(f"Error assessing chunk relevance: {e}")
+            return {
+                "is_relevant": False,
+                "relevance_score": 0.0,
+                "relevant_sections": [],
+                "reasoning": f"Error: {str(e)}"
+            }
+    
+    async def _populate_module_content(self, planned_module: Dict[str, Any], 
+                                     relevant_content: List[Dict[str, Any]], 
+                                     operational_context: str) -> Dict[str, Any]:
+        """Populate module content using relevant chunks"""
+        
+        # Combine all relevant content
+        combined_content = "\n\n".join([item["content"] for item in relevant_content])
+        
+        if not combined_content:
+            # No relevant content found
+            return {
+                **planned_module,
+                "status": "no_content_found",
+                "verbatim_content": "",
+                "ste_content": "",
+                "prerequisites": "",
+                "tools_equipment": "",
+                "warnings": "",
+                "cautions": "",
+                "procedural_steps": json.dumps([]),
+                "expected_results": "",
+                "specifications": "",
+                "references": "",
+                "completeness_score": 0.0
+            }
+        
+        try:
+            response = self.client.chat.completions.create(
+                model="gpt-4o-mini",
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""You are an expert in S1000D technical documentation and ASD-STE100 Simplified Technical English.
+
+                        You are populating a specific data module with content from relevant text chunks.
+                        
+                        Create a comprehensive data module with the following structure:
+                        {{
+                            "verbatim_content": "Original text content formatted for this module",
+                            "ste_content": "Text rewritten in ASD-STE100 Simplified Technical English",
+                            "prerequisites": "Prerequisites and initial conditions required",
+                            "tools_equipment": "Required tools, equipment, and consumables",
+                            "warnings": "Safety warnings and critical information",
+                            "cautions": "Important cautions and notes",
+                            "procedural_steps": [
+                                {{
+                                    "step_number": 1,
+                                    "action": "Clear, actionable step description",
+                                    "details": "Additional details or sub-steps"
+                                }}
+                            ],
+                            "expected_results": "Expected outcomes and verification steps",
+                            "specifications": "Technical specifications and tolerances",
+                            "references": "Reference materials and related documents",
+                            "completeness_score": 0.0-1.0,
+                            "status": "complete|partial|insufficient_data"
+                        }}
+                        
+                        IMPORTANT S1000D RULES:
+                        1. Use proper S1000D structure and terminology
+                        2. Procedures should have clear step-by-step instructions
+                        3. Include all safety information (warnings, cautions)
+                        4. STE should use controlled vocabulary, simple sentences, active voice
+                        5. Use operational context: {operational_context}
+                        6. Be thorough but only include information that belongs in this specific module
+                        
+                        STE RULES:
+                        - Use active voice: "Remove the plug" not "The plug should be removed"
+                        - Use simple sentences with one main action
+                        - Use approved vocabulary only
+                        - Use present tense for procedures
+                        - Use specific nouns, not pronouns
+                        - Maximum 25 words per sentence
+                        - Use parallel structure for similar actions
+                        """
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""
+                        PLANNED MODULE TO POPULATE:
+                        Title: {planned_module.get('title', '')}
+                        Description: {planned_module.get('description', '')}
+                        Type: {planned_module.get('type', '')}
+                        Expected sections: {planned_module.get('estimated_content_sections', [])}
+                        
+                        RELEVANT CONTENT TO USE:
+                        {combined_content}
+                        
+                        Please populate this module with the relevant content, ensuring completeness and S1000D compliance.
+                        """
+                    }
+                ]
+            )
+            
+            raw_response = response.choices[0].message.content
+            cleaned_response = self._clean_json_response(raw_response)
+            result = json.loads(cleaned_response)
+            
+            # Generate DMC
+            dmc = generate_dmc(
+                operational_context,
+                planned_module.get("type", "description"),
+                planned_module.get("info_code", "040"),
+                planned_module.get("item_location", "A"),
+                int(planned_module.get("module_id", "1"))
+            )
+            
+            # Combine planned module with populated content
+            populated_module = {
+                **planned_module,
+                "dmc": dmc,
+                **result
+            }
+            
+            return populated_module
+            
+        except Exception as e:
+            print(f"Error populating module content: {e}")
+            return {
+                **planned_module,
+                "status": "error",
+                "verbatim_content": combined_content,
+                "ste_content": combined_content,
+                "prerequisites": "",
+                "tools_equipment": "",
+                "warnings": "",
+                "cautions": "",
+                "procedural_steps": json.dumps([]),
+                "expected_results": "",
+                "specifications": "",
+                "references": "",
+                "completeness_score": 0.0,
+                "error": str(e)
+            }
+    
+    def _clean_json_response(self, response: str) -> str:
+        """Clean JSON response from AI"""
+        cleaned = response.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        if cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        return cleaned.strip()
+
 def chunk_text(text: str) -> List[str]:
     """Legacy function maintained for backward compatibility"""
     chunker = ChunkingStrategy()
