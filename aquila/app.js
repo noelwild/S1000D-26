@@ -15,6 +15,9 @@ class AquilaApp {
     }
 
     async initializeApp() {
+        // Set up event listeners first, before checking current project
+        this.setupEventListeners();
+        
         // First check if we have a current project
         await this.checkCurrentProject();
         
