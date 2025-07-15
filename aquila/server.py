@@ -249,6 +249,7 @@ STE RULES:
     except json.JSONDecodeError as e:
         print(f"DEBUG: JSON decode error: {e}")
         print(f"DEBUG: Raw response that failed to parse: {raw_response if 'raw_response' in locals() else 'No response captured'}")
+        print(f"DEBUG: Cleaned response that failed to parse: {cleaned_response if 'cleaned_response' in locals() else 'No cleaned response'}")
         # Enhanced fallback response
         return {
             "type": "description",
