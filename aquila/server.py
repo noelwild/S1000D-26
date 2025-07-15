@@ -177,6 +177,15 @@ class Document(SQLModel, table=True):
     operational_context: str = "Water"  # Water, Air, Land, Other
     status: str = "processing"  # processing, completed, failed
 
+class DocumentPlan(SQLModel, table=True):
+    id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    document_id: str = Field(foreign_key="document.id")
+    plan_data: str  # JSON string containing the planning data
+    planning_confidence: float = Field(default=0.0)
+    total_chunks_analyzed: int = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.now)
+    status: str = Field(default="planned")  # planned, populating, completed, failed
+
 class DataModule(SQLModel, table=True):
     id: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
     document_id: str = Field(foreign_key="document.id")
