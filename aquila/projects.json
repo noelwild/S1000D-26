@@ -55,7 +55,15 @@
       "created_at": "2025-07-15T04:18:16.119944",
       "database_path": "projects/df4c1d2e-ef26-4d41-91c4-5c893af1e2a5/aquila.db",
       "uploads_path": "projects/df4c1d2e-ef26-4d41-91c4-5c893af1e2a5/uploads"
+    },
+    {
+      "id": "2ff35219-a210-46e8-aaec-3160dda0a9d0",
+      "name": "Real PDF Test",
+      "description": "Testing with real PDF",
+      "created_at": "2025-07-15T04:18:26.795075",
+      "database_path": "projects/2ff35219-a210-46e8-aaec-3160dda0a9d0/aquila.db",
+      "uploads_path": "projects/2ff35219-a210-46e8-aaec-3160dda0a9d0/uploads"
     }
   ],
-  "current_project": "df4c1d2e-ef26-4d41-91c4-5c893af1e2a5"
+  "current_project": "2ff35219-a210-46e8-aaec-3160dda0a9d0"
 }
