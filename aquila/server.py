@@ -1655,7 +1655,7 @@ async def upload_document(file: UploadFile = File(...), operational_context: str
     
     # Save uploaded file
     upload_dir = Path(project_manager.get_uploads_path())
-    upload_dir.mkdir(exist_ok=True)
+    upload_dir.mkdir(parents=True, exist_ok=True)
     
     file_path = upload_dir / file.filename
     
