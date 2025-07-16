@@ -321,6 +321,9 @@ class SimpleAquilaApp {
             return;
         }
         
+        // Hide the modal immediately when the upload button is clicked
+        this.hideUploadModal();
+        
         try {
             const formData = new FormData();
             formData.append('file', file);
@@ -332,7 +335,7 @@ class SimpleAquilaApp {
             });
             
             if (response.ok) {
-                this.hideUploadModal();
+                // Modal already closed above
                 // Show progress indicator
                 this.showProgress('upload_complete', 'Upload successful, processing document...');
                 // Refresh documents list
@@ -340,10 +343,14 @@ class SimpleAquilaApp {
             } else {
                 const error = await response.json();
                 alert(`Upload failed: ${error.detail}`);
+                // Show the modal again if there was an error
+                this.showUploadModal();
             }
         } catch (error) {
             console.error('Error uploading file:', error);
             alert('Failed to upload file. Please try again.');
+            // Show the modal again if there was an error
+            this.showUploadModal();
         }
     }
     
