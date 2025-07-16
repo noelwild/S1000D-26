@@ -89,11 +89,11 @@ class ProjectManager:
         """Create a new project"""
         project_id = str(uuid.uuid4())
         project_dir = self.projects_dir / project_id
-        project_dir.mkdir(exist_ok=True)
+        project_dir.mkdir(parents=True, exist_ok=True)
         
         # Create project uploads directory
         uploads_dir = project_dir / "uploads"
-        uploads_dir.mkdir(exist_ok=True)
+        uploads_dir.mkdir(parents=True, exist_ok=True)
         
         project_data = {
             "id": project_id,
