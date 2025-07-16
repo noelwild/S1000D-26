@@ -234,12 +234,13 @@ startxref
             self.log("❌ Document upload failed", "ERROR")
             return False
             
-        document_id = upload_response.get('id') if upload_response else None
+        document_id = upload_response.get('document_id') if upload_response else None
         if document_id:
             self.uploaded_documents.append(document_id)
             self.log(f"✅ Document uploaded successfully with ID: {document_id}")
         else:
             self.log("❌ No document ID returned from upload")
+            self.log(f"   Upload response: {upload_response}")
             return False
 
         # Step 5: Verify document appears in GET /api/documents
