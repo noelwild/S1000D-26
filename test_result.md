@@ -95,18 +95,24 @@ backend:
       - working: true
         agent: "testing"
         comment: "Successfully handles file uploads with operational_context, proper validation for missing files"
+      - working: true
+        agent: "testing"
+        comment: "COMPREHENSIVE UPLOAD WORKFLOW TEST PASSED: Upload endpoint POST /api/documents/upload working correctly. File upload with proper PDF works. Project context validation working. Document retrieval after upload confirmed. Upload returns proper document_id and status. Duplicate file detection working. Only issue: Data modules not generated due to invalid OpenAI API key (authentication error), but core upload functionality is solid."
 
   - task: "GET /api/data-modules - Get data modules for a document"
     implemented: true
-    working: true
+    working: false
     file: "/app/aquila/server.py"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
     needs_retesting: false
     status_history:
       - working: true
         agent: "testing"
         comment: "Successfully returns data modules, handles document_id parameter correctly"
+      - working: false
+        agent: "testing"
+        comment: "Data modules endpoint works but no modules are generated due to OpenAI API authentication failure (Error code: 401 - Incorrect API key). The endpoint returns empty array correctly, but AI processing fails preventing module generation."
 
   - task: "Error Handling - Invalid requests"
     implemented: true
@@ -148,16 +154,20 @@ frontend:
 metadata:
   created_by: "testing_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: false
 
 test_plan:
   current_focus:
-    - "All backend API endpoints tested successfully"
-  stuck_tasks: []
+    - "Complete upload workflow testing completed successfully"
+    - "OpenAI API key authentication issue identified"
+  stuck_tasks: 
+    - "GET /api/data-modules - Data module generation blocked by OpenAI API authentication"
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
   - agent: "testing"
     message: "Comprehensive backend testing completed successfully. All 15 API tests passed with 100% success rate. All endpoints mentioned in review request are working correctly: Project Management (GET/POST/DELETE projects, current project, project selection), Document Management (list documents, upload PDF), and Data Modules (get data modules with document_id parameter). Minor issue with error status codes (500 instead of 404) but core functionality is solid."
+  - agent: "testing"
+    message: "UPLOAD WORKFLOW COMPREHENSIVE TEST COMPLETED: ✅ Upload endpoint POST /api/documents/upload working correctly (fixed from /api/upload). ✅ File upload with proper PDF files working. ✅ Project context validation working - upload requires project selection. ✅ Document retrieval after upload confirmed - documents appear in GET /api/documents. ✅ Upload returns proper document_id and response format. ✅ Duplicate file detection working. ❌ Data modules generation failing due to OpenAI API authentication error (401 - Incorrect API key). Core upload workflow is solid, only AI processing blocked by API key issue."
