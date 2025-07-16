@@ -1,12 +1,14 @@
 
-// Simplified Aquila App that bypasses project selection
+// Simplified Aquila App with project creation functionality
 class SimpleAquilaApp {
     constructor() {
         this.currentDocument = null;
         this.currentModule = null;
+        this.currentProject = null;
         this.isSTEView = true;
         this.documents = [];
         this.modules = [];
+        this.projects = [];
         
         this.initializeApp();
     }
@@ -14,8 +16,42 @@ class SimpleAquilaApp {
     async initializeApp() {
         console.log('Initializing simplified app...');
         this.setupEventListeners();
-        this.showMainInterface();
-        await this.loadDocuments();
+        
+        // Check if we have a current project
+        await this.checkCurrentProject();
+        
+        // If no project is selected, show project selection
+        if (!this.currentProject) {
+            console.log('No current project, showing project selection');
+            this.showProjectSelection();
+        } else {
+            console.log('Current project exists, showing main interface');
+            this.showMainInterface();
+            await this.loadDocuments();
+        }
+    }
+    
+    async checkCurrentProject() {
+        try {
+            console.log('Checking current project...');
+            const response = await fetch('/api/projects/current');
+            if (response.ok) {
+                const result = await response.json();
+                console.log('Current project API response:', result);
+                if (result.status === 'no_project_selected') {
+                    this.currentProject = null;
+                    console.log('No project selected');
+                } else {
+                    this.currentProject = result;
+                    console.log('Current project set to:', this.currentProject);
+                }
+                this.updateProjectDisplay();
+            } else {
+                console.log('Failed to check current project');
+            }
+        } catch (error) {
+            console.error('Error checking current project:', error);
+        }
     }
     
     setupEventListeners() {
@@ -28,6 +64,22 @@ class SimpleAquilaApp {
             this.currentDocument = e.target.value;
             await this.loadDataModules();
         });
+        
+        // Upload functionality
+        document.getElementById('uploadBtn').addEventListener('click', () => this.showUploadModal());
+        document.getElementById('uploadBtn2').addEventListener('click', () => this.showUploadModal());
+        document.getElementById('cancelUpload').addEventListener('click', () => this.hideUploadModal());
+        document.getElementById('confirmUpload').addEventListener('click', () => this.handleUpload());
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            document.getElementById('confirmUpload').disabled = !e.target.files[0];
+        });
+        
+        // Project management
+        document.getElementById('projectBtn').addEventListener('click', () => this.showProjectSelection());
+        document.getElementById('newProjectBtn').addEventListener('click', () => this.showNewProjectModal());
+        document.getElementById('cancelNewProject').addEventListener('click', () => this.hideNewProjectModal());
+        document.getElementById('confirmNewProject').addEventListener('click', () => this.handleCreateProject());
+        document.getElementById('cancelProjectSelection').addEventListener('click', () => this.hideProjectSelection());
     }
     
     showMainInterface() {
