@@ -202,8 +202,8 @@ startxref
             200
         )
         
-        if success and current_data.get('current_project'):
-            current_id = current_data['current_project']['id']
+        if success and current_data.get('id'):
+            current_id = current_data['id']
             if current_id == project_id:
                 self.log("✅ Project context established successfully")
             else:
