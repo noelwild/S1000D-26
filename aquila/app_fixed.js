@@ -192,6 +192,9 @@ class SimpleAquilaApp {
             return;
         }
         
+        // Hide the modal immediately when the button is clicked
+        this.hideNewProjectModal();
+        
         try {
             const response = await fetch('/api/projects', {
                 method: 'POST',
@@ -203,17 +206,20 @@ class SimpleAquilaApp {
             
             if (response.ok) {
                 const project = await response.json();
-                this.hideNewProjectModal();
                 await this.loadProjects();
                 // Auto-select the new project
                 await this.selectProject(project.id);
             } else {
                 const error = await response.json();
                 alert(`Failed to create project: ${error.detail}`);
+                // Show the modal again if there was an error
+                this.showNewProjectModal();
             }
         } catch (error) {
             console.error('Error creating project:', error);
             alert('Failed to create project. Please try again.');
+            // Show the modal again if there was an error
+            this.showNewProjectModal();
         }
     }
     
