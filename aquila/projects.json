@@ -127,7 +127,15 @@
       "created_at": "2025-07-16T00:21:42.884302",
       "database_path": "projects/ed4435a1-568c-4d93-9797-bc8a2f8009c2/aquila.db",
       "uploads_path": "projects/ed4435a1-568c-4d93-9797-bc8a2f8009c2/uploads"
+    },
+    {
+      "id": "a14abf73-1151-4311-a74c-f0658537e128",
+      "name": "Instant Close Test Project",
+      "description": "Testing if the modal closes immediately when Create Project button is clicked",
+      "created_at": "2025-07-16T00:34:32.312523",
+      "database_path": "projects/a14abf73-1151-4311-a74c-f0658537e128/aquila.db",
+      "uploads_path": "projects/a14abf73-1151-4311-a74c-f0658537e128/uploads"
     }
   ],
-  "current_project": "ed4435a1-568c-4d93-9797-bc8a2f8009c2"
+  "current_project": "a14abf73-1151-4311-a74c-f0658537e128"
 }
