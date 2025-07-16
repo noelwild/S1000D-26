@@ -103,7 +103,15 @@
       "created_at": "2025-07-15T07:36:53.579339",
       "database_path": "projects/4dabd4f2-7531-4558-9e6f-1fd3d24fdc03/aquila.db",
       "uploads_path": "projects/4dabd4f2-7531-4558-9e6f-1fd3d24fdc03/uploads"
+    },
+    {
+      "id": "b51c6397-68b2-42ff-945d-42dd80965616",
+      "name": "Test Project Creation",
+      "description": "This is a test project to verify the create project functionality works correctly.",
+      "created_at": "2025-07-16T00:07:34.827868",
+      "database_path": "projects/b51c6397-68b2-42ff-945d-42dd80965616/aquila.db",
+      "uploads_path": "projects/b51c6397-68b2-42ff-945d-42dd80965616/uploads"
     }
   ],
-  "current_project": "3b4c2105-5dc8-45d2-82ee-8e9e203388e7"
+  "current_project": "b51c6397-68b2-42ff-945d-42dd80965616"
 }
