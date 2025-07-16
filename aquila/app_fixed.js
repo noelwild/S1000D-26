@@ -320,7 +320,7 @@ class SimpleAquilaApp {
             formData.append('file', file);
             formData.append('operational_context', operationalContext);
             
-            const response = await fetch('/api/upload', {
+            const response = await fetch('/api/documents/upload', {
                 method: 'POST',
                 body: formData
             });
